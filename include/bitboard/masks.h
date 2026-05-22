@@ -1,6 +1,5 @@
+#pragma once
 #include <cstdint>
-
-
 // Files are whole continuous bytes in your architecture
 // Ranks (Rows) are whole continuous bytes now
 constexpr uint64_t RANK_1 = 0x00000000000000FFULL; // Squares 0-7   (a1-h1)
@@ -21,3 +20,15 @@ constexpr uint64_t FILE_E = 0x1010101010101010ULL; // Bit 4 of every byte (e1, e
 constexpr uint64_t FILE_F = 0x2020202020202020ULL; // Bit 5 of every byte (f1, f2, f3...)
 constexpr uint64_t FILE_G = 0x4040404040404040ULL; // Bit 6 of every byte (g1, g2, g3...)
 constexpr uint64_t FILE_H = 0x8080808080808080ULL; // Bit 7 of every byte (h1, h2, h3...)
+
+inline constexpr int castle_rights_mask[64] =
+{
+    13, 15, 15, 15, 12, 15, 15, 14,
+    15, 15, 15, 15, 15, 15, 15, 15,
+    15, 15, 15, 15, 15, 15, 15, 15,
+    15, 15, 15, 15, 15, 15, 15, 15,
+    15, 15, 15, 15, 15, 15, 15, 15,
+    15, 15, 15, 15, 15, 15, 15, 15,
+    15, 15, 15, 15, 15, 15, 15, 15,
+     7, 15, 15, 15,  3, 15, 15, 11
+};

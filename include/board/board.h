@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
-#include <move.h>
+#include <move/move.h>
+using u64 = uint64_t;
 using Bitboard = uint64_t;
 enum Colour : uint8_t{
     WHITE, BLACK, BOTH
@@ -47,7 +48,6 @@ public:
 
     // Castling rights
     uint8_t castling_rights;
-    const int castle_rights_mask[64];
 
     // En passant square
     Square ep_square;
@@ -75,4 +75,8 @@ public:
     inline void remove_piece(Piece piece, Square sq);
     inline void move_piece(Piece piece, Square from, Square to);
     Piece promotion_piece(Colour side, MoveFlag flag) const;
+    bool isSquareAttacked(Square square,Colour attacker_colour) const;
+    u64 get_bishop_attacks(Square square, u64 blockers) const;
+    u64 get_rook_attacks(Square square, u64 blockers) const;
+    void reset();
 };

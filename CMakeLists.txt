@@ -14,6 +14,10 @@ include_directories(include)
 # For small projects, listing them manually is safest
 set(SOURCES 
     src/main.cpp
+    src/bitboard/bitboard.cpp
+    src/board/board.cpp
+    src/movegen/attacks.cpp
+    src/movegen/generateattacks.cpp
 )
 
 # 5. Define the final executable output

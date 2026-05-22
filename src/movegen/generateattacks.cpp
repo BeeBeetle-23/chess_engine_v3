@@ -1,9 +1,9 @@
-#include "board.h"
-#include "move.h"
-#include "masks.h"
-#include "attacks.h"
-#include "generateattacks.h"
-#include "bitboard.h"
+#include "board/board.h"
+#include "move/move.h"
+#include "bitboard/masks.h"
+#include "movegen/attacks.h"
+#include "movegen/generateattacks.h"
+#include "bitboard/bitboard.h"
 #include <bit>
 using u64 = uint64_t;
 
@@ -241,7 +241,95 @@ void generateKingMoves(const Board &board, Move *move_list, Colour colour, int *
 
         }
     }
-}
+     if (colour == WHITE)
+        {
+
+            if (board.castling_rights & WK_CASTLE)
+            {
+                if (!(board.occupancies[BOTH] &
+                    ((1ULL << f1) |
+                     (1ULL << g1))))
+                {
+                    if (!board.isSquareAttacked(e1, BLACK) &&
+                        !board.isSquareAttacked(f1, BLACK) &&
+                        !board.isSquareAttacked(g1, BLACK))
+                    {
+                        move_list[(*move_count)++] =
+                            Move(
+                                e1,
+                                g1,
+                                KING_CASTLE
+                            );
+                    }
+                }
+            }
+
+            if (board.castling_rights & WQ_CASTLE)
+            {
+                if (!(board.occupancies[BOTH] &
+                    ((1ULL << b1) |
+                     (1ULL << c1) |
+                     (1ULL << d1))))
+                {
+                    if (!board.isSquareAttacked(e1, BLACK) &&
+                        !board.isSquareAttacked(d1, BLACK) &&
+                        !board.isSquareAttacked(c1, BLACK))
+                    {
+                        move_list[(*move_count)++] =
+                            Move(
+                                e1,
+                                c1,
+                                QUEEN_CASTLE
+                            );
+                    }
+                }
+            }
+        }
+        else
+        {
+
+            if (board.castling_rights & BK_CASTLE)
+            {
+                if (!(board.occupancies[BOTH] &
+                    ((1ULL << f8) |
+                     (1ULL << g8))))
+                {
+                    if (!board.isSquareAttacked(e8, WHITE) &&
+                        !board.isSquareAttacked(f8, WHITE) &&
+                        !board.isSquareAttacked(g8, WHITE))
+                    {
+                        move_list[(*move_count)++] =
+                            Move(
+                                e8,
+                                g8,
+                                KING_CASTLE
+                            );
+                    }
+                }
+            }
+
+            if (board.castling_rights & BQ_CASTLE)
+            {
+                if (!(board.occupancies[BOTH] &
+                    ((1ULL << b8) |
+                     (1ULL << c8) |
+                     (1ULL << d8))))
+                {
+                    if (!board.isSquareAttacked(e8, WHITE) &&
+                        !board.isSquareAttacked(d8, WHITE) &&
+                        !board.isSquareAttacked(c8, WHITE))
+                    {
+                        move_list[(*move_count)++] =
+                            Move(
+                                e8,
+                                c8,
+                                QUEEN_CASTLE
+                            );
+                    }
+                }
+            }
+        }
+    }
 
 void generateBishopMoves(const Board &board, Move *move_list, Colour colour, int *move_count) {
     // Identify our bishop piece type
@@ -414,3 +502,38 @@ void generateQueenMoves(const Board &board, Move *move_list, Colour colour, int 
     }
 }
 
+void generateLegalMoves(Board &board,Move *legal_move_list,Colour colour,int *legal_count)
+{
+    int movecount = 0;
+
+    Move move_list[256];
+
+    Colour attacker =
+        (colour == WHITE)
+        ? BLACK
+        : WHITE;
+
+    generatePawnMoves(board, move_list, colour, &movecount);
+    generateKnightMoves(board, move_list, colour, &movecount);
+    generateBishopMoves(board, move_list, colour, &movecount);
+    generateRookMoves(board, move_list, colour, &movecount);
+    generateQueenMoves(board, move_list, colour, &movecount);
+    generateKingMoves(board, move_list, colour, &movecount);
+
+    *legal_count = 0;
+
+    for (int i = 0; i < movecount; i++)
+    {
+        board.make_move(move_list[i]);
+
+        if (!board.isSquareAttacked(board.king_square[colour],attacker))
+        {
+            legal_move_list[*legal_count] =
+                move_list[i];
+
+            (*legal_count)++;
+        }
+
+        board.undo_move();
+    }
+}

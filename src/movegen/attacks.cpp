@@ -1,5 +1,10 @@
-#include "attacks.h"
-#include "masks.h"
+#include "movegen/attacks.h"
+#include "bitboard/masks.h"
+#include "move/move.h"
+#include "board/board.h"
+u64 king_attacks[64];
+u64 knight_attacks[64];
+u64 pawn_attacks[2][64];
 u64 maskKnightAttacks(int sq)
 {
     u64 attacks = 0ULL;
@@ -38,9 +43,43 @@ u64 maskKingAttacks(int sq)
     return attacks;
 }
 
+u64 maskPawnAttacks(Square sq, Colour side)
+{
+    u64 attacks = 0ULL;
+
+    u64 bitboard = 1ULL << sq;
+
+    if (side == WHITE)
+    {
+        // up-left
+        if ((bitboard << 7) & ~FILE_H)
+            attacks |= (bitboard << 7);
+
+        // up-right
+        if ((bitboard << 9) & ~FILE_A)
+            attacks |= (bitboard << 9);
+    }
+    else
+    {
+        // down-left
+        if ((bitboard >> 9) & ~FILE_H)
+            attacks |= (bitboard >> 9);
+
+        // down-right
+        if ((bitboard >> 7) & ~FILE_A)
+            attacks |= (bitboard >> 7);
+    }
+
+    return attacks;
+}
+
 void initAttackTables(){
     for(int i = 0; i<64; i++){
         knight_attacks[i] = maskKnightAttacks(i);
         king_attacks[i] = maskKingAttacks(i);
+        pawn_attacks[WHITE][i] = maskPawnAttacks((Square)i,WHITE);
+    }
+    for(int i = 64; i<128; i++){
+        pawn_attacks[BLACK][i] = maskPawnAttacks((Square)i,BLACK);
     }
 }

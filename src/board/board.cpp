@@ -1,6 +1,163 @@
-#include "board.h"
-#include "move.h"
-#include "bitboard.h"
+#include "board/board.h"
+#include "move/move.h"
+#include "bitboard/bitboard.h"
+#include "movegen/attacks.h"
+#include "bitboard/masks.h"
+#include <cstdint>
+using u64 = uint64_t;
+void Board::reset() {
+    // 1. Clear all board data
+    for (int p = 0; p < 12; ++p) pieces[p] = 0ULL;
+    for (int sq = 0; sq < 64; ++sq) piece_on[sq] = NO_PIECE;
+    for (int o = 0; o < 3; ++o) occupancies[o] = 0ULL;
+    
+    // 2. Reset game state variables
+    side_to_move = WHITE;
+    castling_rights = WK_CASTLE | WQ_CASTLE | BK_CASTLE | BQ_CASTLE;
+    ep_square = NO_SQUARE;
+    halfmove_clock = 0;
+    fullmove_number = 1;
+    ply = 0;
+
+    // 3. Place Pawns (Using your rank-major layout: Rank 2 is 8-15, Rank 7 is 48-55)
+    for (int file = 0; file < 8; ++file) {
+        add_piece(WP, static_cast<Square>(8 + file));  // a2 through h2
+        add_piece(BP, static_cast<Square>(48 + file)); // a7 through h7
+    }
+
+    // 4. Place White Pieces (Rank 1)
+    add_piece(WR, a1); add_piece(WN, b1); add_piece(WB, c1); add_piece(WQ, d1);
+    add_piece(WK, e1); add_piece(WB, f1); add_piece(WN, g1); add_piece(WR, h1);
+
+    // 5. Place Black Pieces (Rank 8)
+    add_piece(BR, a8); add_piece(BN, b8); add_piece(BB, c8); add_piece(BQ, d8);
+    add_piece(BK, e8); add_piece(BB, f8); add_piece(BN, g8); add_piece(BR, h8);
+
+    // 6. Cache King locations
+    king_square[WHITE] = e1;
+    king_square[BLACK] = e8;
+
+    // 7. Synchronize the occupancy bitboards
+    update_occupancies();
+}
+u64 Board::get_bishop_attacks(Square square, u64 blockers) const
+{
+    u64 attacks = 0ULL;
+
+    int r, f;
+
+    int tr = square / 8;
+    int tf = square % 8;
+
+    // NE
+    for (r = tr + 1, f = tf + 1;
+         r <= 7 && f <= 7;
+         r++, f++)
+    {
+        int sq = r * 8 + f;
+
+        attacks |= (1ULL << sq);
+
+        if (blockers & (1ULL << sq))
+            break;
+    }
+
+    // NW
+    for (r = tr + 1, f = tf - 1;
+         r <= 7 && f >= 0;
+         r++, f--)
+    {
+        int sq = r * 8 + f;
+
+        attacks |= (1ULL << sq);
+
+        if (blockers & (1ULL << sq))
+            break;
+    }
+
+    // SE
+    for (r = tr - 1, f = tf + 1;
+         r >= 0 && f <= 7;
+         r--, f++)
+    {
+        int sq = r * 8 + f;
+
+        attacks |= (1ULL << sq);
+
+        if (blockers & (1ULL << sq))
+            break;
+    }
+
+    // SW
+    for (r = tr - 1, f = tf - 1;
+         r >= 0 && f >= 0;
+         r--, f--)
+    {
+        int sq = r * 8 + f;
+
+        attacks |= (1ULL << sq);
+
+        if (blockers & (1ULL << sq))
+            break;
+    }
+
+    return attacks;
+}
+u64 Board::get_rook_attacks( Square square,u64 blockers) const
+{
+    u64 attacks = 0ULL;
+
+    int r, f;
+
+    int tr = square / 8;
+    int tf = square % 8;
+
+    // North
+    for (r = tr + 1; r <= 7; r++)
+    {
+        int sq = r * 8 + tf;
+
+        attacks |= (1ULL << sq);
+
+        if (blockers & (1ULL << sq))
+            break;
+    }
+
+    // South
+    for (r = tr - 1; r >= 0; r--)
+    {
+        int sq = r * 8 + tf;
+
+        attacks |= (1ULL << sq);
+
+        if (blockers & (1ULL << sq))
+            break;
+    }
+
+    // East
+    for (f = tf + 1; f <= 7; f++)
+    {
+        int sq = tr * 8 + f;
+
+        attacks |= (1ULL << sq);
+
+        if (blockers & (1ULL << sq))
+            break;
+    }
+
+    // West
+    for (f = tf - 1; f >= 0; f--)
+    {
+        int sq = tr * 8 + f;
+
+        attacks |= (1ULL << sq);
+
+        if (blockers & (1ULL << sq))
+            break;
+    }
+
+    return attacks;
+}
 inline void Board::remove_piece(Piece piece, Square sq)
 {
     pieces[piece] = setBitZero(pieces[piece], sq);
@@ -15,6 +172,11 @@ inline void Board::move_piece(Piece piece, Square from, Square to)
 {
     remove_piece(piece, from);
     add_piece(piece, to);
+    if (piece == WK)
+        king_square[WHITE] = to;
+
+    else if (piece == BK)
+        king_square[BLACK] = to;
 }
 Piece Board::promotion_piece(Colour side,MoveFlag flag) const
 {
@@ -56,6 +218,90 @@ Piece Board::promotion_piece(Colour side,MoveFlag flag) const
         default:
             return BQ;
     }
+}
+bool Board::isSquareAttacked(Square square, Colour attacker) const
+{
+
+    if (attacker == WHITE)
+    {
+        if (pieces[WP] &
+            pawn_attacks[BLACK][square])
+        {
+            return true;
+        }
+    }
+    else
+    {
+        if (pieces[BP] &
+            pawn_attacks[WHITE][square])
+        {
+            return true;
+        }
+    }
+
+    if (knight_attacks[square] &
+        (attacker == WHITE
+            ? pieces[WN]
+            : pieces[BN]))
+    {
+        return true;
+    }
+
+    if (king_attacks[square] &
+        (attacker == WHITE
+            ? pieces[WK]
+            : pieces[BK]))
+    {
+        return true;
+    }
+
+    u64 bishop_attackers =
+        (attacker == WHITE)
+        ? (pieces[WB] | pieces[WQ])
+        : (pieces[BB] | pieces[BQ]);
+
+    if (get_bishop_attacks(
+            square,
+            occupancies[BOTH]) &
+        bishop_attackers)
+    {
+        return true;
+    }
+    u64 rook_attackers =
+        (attacker == WHITE)
+        ? (pieces[WR] | pieces[WQ])
+        : (pieces[BR] | pieces[BQ]);
+
+    if (get_rook_attacks(
+            square,
+            occupancies[BOTH]) &
+        rook_attackers)
+    {
+        return true;
+    }
+
+    return false;
+}
+void Board::update_occupancies(){
+    occupancies[WHITE] =
+        pieces[WP] |
+        pieces[WN] |
+        pieces[WB] |
+        pieces[WR] |
+        pieces[WQ] |
+        pieces[WK];
+
+    occupancies[BLACK] =
+        pieces[BP] |
+        pieces[BN] |
+        pieces[BB] |
+        pieces[BR] |
+        pieces[BQ] |
+        pieces[BK];
+
+    occupancies[BOTH] =
+        occupancies[WHITE] |
+        occupancies[BLACK];
 }
 void Board::make_move(Move move)
 {
@@ -239,27 +485,7 @@ void Board::make_move(Move move)
     castling_rights &=
         castle_rights_mask[to];
 
-    // Update occupancies
-
-    occupancies[WHITE] =
-        pieces[WP] |
-        pieces[WN] |
-        pieces[WB] |
-        pieces[WR] |
-        pieces[WQ] |
-        pieces[WK];
-
-    occupancies[BLACK] =
-        pieces[BP] |
-        pieces[BN] |
-        pieces[BB] |
-        pieces[BR] |
-        pieces[BQ] |
-        pieces[BK];
-
-    occupancies[BOTH] =
-        occupancies[WHITE] |
-        occupancies[BLACK];
+    update_occupancies();
 
     // Update clocks
 
@@ -281,33 +507,45 @@ void Board::make_move(Move move)
 
     ply++;
 }
-
 void Board::undo_move(){
     ply--;
-    Move move = history[ply].move;
+
     Undo undo = history[ply];
-    const Square from = move.from();
-    const Square to   = move.to();
-    const MoveFlag flag = move.flag();
-    Piece piece = piece_on[to];
+    Move move = undo.move;
+
+    Square from = move.from();
+    Square to   = move.to();
+
+    MoveFlag flag = move.flag();
+
+    side_to_move =
+        (side_to_move == WHITE)
+        ? BLACK
+        : WHITE;
+
     Colour colour = side_to_move;
-    const MoveFlag flag = move.flag();
-    side_to_move = (side_to_move == WHITE)?BLACK:WHITE;
-    halfmove_clock = history[ply].halfmove_clock;
+
+    castling_rights = undo.castling_rights;
+    ep_square       = undo.ep_square;
+    halfmove_clock  = undo.halfmove_clock;
 
     switch(flag){
         case QUIET:{
+            Piece piece = piece_on[to];
             move_piece(piece,to,from);
             break;}
         case DOUBLE_PAWN_PUSH:{
+            Piece piece = piece_on[to];
             move_piece(piece,to,from);
             ep_square = NO_SQUARE;
             break;}
         case CAPTURE:{
+            Piece piece = piece_on[to];
             Piece captured = undo.captured_piece;
             move_piece(piece,to,from);
-            add_piece(captured,from);break;}
+            add_piece(captured,to);break;}
         case EP_CAPTURE:{
+            Piece piece = piece_on[to];
             Piece captured = undo.captured_piece;
             move_piece(piece,to,from);
             Square offset = (colour == WHITE)?Square(to-8):Square(to+8);
@@ -351,23 +589,5 @@ void Board::undo_move(){
             break;
         }
     }
-     occupancies[WHITE] =
-        pieces[WP] |
-        pieces[WN] |
-        pieces[WB] |
-        pieces[WR] |
-        pieces[WQ] |
-        pieces[WK];
-
-    occupancies[BLACK] =
-        pieces[BP] |
-        pieces[BN] |
-        pieces[BB] |
-        pieces[BR] |
-        pieces[BQ] |
-        pieces[BK];
-
-    occupancies[BOTH] =
-        occupancies[WHITE] |
-        occupancies[BLACK];
+    update_occupancies();
 }

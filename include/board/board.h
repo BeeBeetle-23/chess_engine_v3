@@ -16,7 +16,6 @@ enum Castling : uint8_t {
     BK_CASTLE = 4,
     BQ_CASTLE = 8
 };
-
 struct Undo {
 
     Move move;
@@ -37,6 +36,9 @@ public:
     // Piece bitboards
     Bitboard pieces[12];
 
+    //Piece On board
+    Piece piece_on[64];
+
     // Occupancies
     Bitboard occupancies[3];
 
@@ -45,6 +47,7 @@ public:
 
     // Castling rights
     uint8_t castling_rights;
+    const int castle_rights_mask[64];
 
     // En passant square
     Square ep_square;
@@ -68,4 +71,8 @@ public:
     void undo_move();
 
     void update_occupancies();
+    inline void add_piece(Piece piece, Square sq);
+    inline void remove_piece(Piece piece, Square sq);
+    inline void move_piece(Piece piece, Square from, Square to);
+    Piece promotion_piece(Colour side, MoveFlag flag) const;
 };

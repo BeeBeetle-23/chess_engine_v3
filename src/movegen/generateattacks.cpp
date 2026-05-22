@@ -1,10 +1,13 @@
 #include "board.h"
 #include "move.h"
 #include "masks.h"
+#include "attacks.h"
 #include "generateattacks.h"
+#include "bitboard.h"
+#include <bit>
 using u64 = uint64_t;
 
-void generatePawnAttacks(const Board &board, Move *move_list, Colour colour, int *move_count) {
+void generatePawnMoves(const Board &board, Move *move_list, Colour colour, int *move_count) {
     u64 empty_squares = ~board.occupancies[BOTH];
 
     // Build the en passant target bitboard
@@ -200,3 +203,214 @@ void generatePawnAttacks(const Board &board, Move *move_list, Colour colour, int
         }
     }
 }
+
+void generateKnightMoves(const Board &board, Move *move_list, Colour colour, int *move_count){
+    u64 us = (colour == WHITE)?board.occupancies[WHITE]:board.occupancies[BLACK];
+    u64 enemy = (colour == WHITE)?board.occupancies[BLACK]:board.occupancies[WHITE];
+    u64 knights = (colour == WHITE)?board.pieces[WN]:board.pieces[BN];
+    while(knights){
+        int from = pop_lsb(knights);
+        u64 attacks = knight_attacks[from];
+        while(attacks){
+            int to = pop_lsb(attacks);
+            if(!((1ULL<<to)&us)){
+                MoveFlag flag = ((1ULL << to) & enemy)? CAPTURE: QUIET;
+
+                move_list[(*move_count)++] = Move ((Square)from, (Square)to, flag);
+            }
+
+        }
+    }
+
+}
+
+void generateKingMoves(const Board &board, Move *move_list, Colour colour, int *move_count){
+    u64 us = (colour == WHITE)?board.occupancies[WHITE]:board.occupancies[BLACK];
+    u64 enemy = (colour == WHITE)?board.occupancies[BLACK]:board.occupancies[WHITE];
+    u64 king = (colour == WHITE)?board.pieces[WK]:board.pieces[BK];
+    while(king){
+        int from = pop_lsb(king);
+        u64 attacks = king_attacks[from];
+        while(attacks){
+            int to = pop_lsb(attacks);
+            if(!((1ULL<<to)&us)){
+                MoveFlag flag = ((1ULL << to) & enemy)? CAPTURE: QUIET;
+
+                move_list[(*move_count)++] = Move ((Square)from, (Square)to, flag);
+            }
+
+        }
+    }
+}
+
+void generateBishopMoves(const Board &board, Move *move_list, Colour colour, int *move_count) {
+    // Identify our bishop piece type
+    Piece bishop_piece = (colour == WHITE) ? WB : BB;
+    Bitboard bishops = board.pieces[bishop_piece];
+
+    // Grab friend vs enemy occupancy layers
+    Colour opponent_colour = (colour == WHITE) ? BLACK : WHITE;
+    Bitboard same_color_occ = board.occupancies[colour];
+    Bitboard opp_color_occ = board.occupancies[opponent_colour];
+
+    // Diagonal direction shifts: {delta_file, delta_rank}
+    const int directions[4][2] = {
+        { 1,  1},  // North-East
+        {-1,  1},  // North-West
+        { 1, -1},  // South-East
+        {-1, -1}   // South-West
+    };
+
+    while (bishops) {
+        // pop_lsb clears the current bit and returns the index
+        int from_idx = pop_lsb(bishops);
+        Square from_sq = static_cast<Square>(from_idx);
+
+        // Rank-Major Math: File is lower 3 bits, Rank is upper 3 bits
+        int file = from_idx & 7;
+        int rank = from_idx >> 3;
+
+        // Radiate outward along the 4 diagonal paths
+        for (int d = 0; d < 4; ++d) {
+            int df = directions[d][0];
+            int dr = directions[d][1];
+
+            int cur_file = file + df;
+            int cur_rank = rank + dr;
+
+            // Stay within the boundaries of the 8x8 chessboard
+            while (cur_file >= 0 && cur_file < 8 && cur_rank >= 0 && cur_rank < 8) {
+                
+                // Reconstruct the destination square for your new rank-major schema
+                Square to_sq = static_cast<Square>((cur_rank << 3) | cur_file);
+                Bitboard to_bit = 1ULL << to_sq;
+
+                // 1. Path is blocked by a teammate -> Ray terminates
+                if (same_color_occ & to_bit) {
+                    break;
+                }
+
+                // 2. Path is blocked by an opponent -> Capture, then ray terminates
+                if (opp_color_occ & to_bit) {
+                    move_list[(*move_count)++] = Move(from_sq, to_sq, CAPTURE);
+                    break;
+                }
+
+                // 3. Square is empty -> Record quiet move, continue down the ray
+                move_list[(*move_count)++] = Move(from_sq, to_sq, QUIET);
+
+                cur_file += df;
+                cur_rank += dr;
+            }
+        }
+    }
+}
+
+void generateRookMoves(const Board &board, Move *move_list, Colour colour, int *move_count) {
+    // Identify our rook piece type
+    Piece rook_piece = (colour == WHITE) ? WR : BR;
+    Bitboard rooks = board.pieces[rook_piece];
+
+    // Grab friend vs enemy occupancy layers
+    Colour opponent_colour = (colour == WHITE) ? BLACK : WHITE;
+    Bitboard same_color_occ = board.occupancies[colour];
+    Bitboard opp_color_occ = board.occupancies[opponent_colour];
+
+    // Orthogonal direction shifts: {delta_file, delta_rank}
+    const int directions[4][2] = {
+        { 0,  1},  // North
+        { 0, -1},  // South
+        { 1,  0},  // East
+        {-1,  0}   // West
+    };
+
+    while (rooks) {
+        int from_idx = pop_lsb(rooks);
+        Square from_sq = static_cast<Square>(from_idx);
+
+        int file = from_idx & 7;
+        int rank = from_idx >> 3;
+
+        // Radiate outward along the 4 orthogonal paths
+        for (int d = 0; d < 4; ++d) {
+            int df = directions[d][0];
+            int dr = directions[d][1];
+
+            int cur_file = file + df;
+            int cur_rank = rank + dr;
+
+            while (cur_file >= 0 && cur_file < 8 && cur_rank >= 0 && cur_rank < 8) {
+                Square to_sq = static_cast<Square>((cur_rank << 3) | cur_file);
+                Bitboard to_bit = 1ULL << to_sq;
+
+                if (same_color_occ & to_bit) {
+                    break;
+                }
+
+                if (opp_color_occ & to_bit) {
+                    move_list[(*move_count)++] = Move(from_sq, to_sq, CAPTURE);
+                    break;
+                }
+
+                move_list[(*move_count)++] = Move(from_sq, to_sq, QUIET);
+
+                cur_file += df;
+                cur_rank += dr;
+            }
+        }
+    }
+}
+
+void generateQueenMoves(const Board &board, Move *move_list, Colour colour, int *move_count) {
+    // Identify our queen piece type
+    Piece queen_piece = (colour == WHITE) ? WQ : BQ;
+    Bitboard queens = board.pieces[queen_piece];
+
+    // Grab friend vs enemy occupancy layers
+    Colour opponent_colour = (colour == WHITE) ? BLACK : WHITE;
+    Bitboard same_color_occ = board.occupancies[colour];
+    Bitboard opp_color_occ = board.occupancies[opponent_colour];
+
+    // Combine Orthogonal and Diagonal directions: {delta_file, delta_rank}
+    const int directions[8][2] = {
+        { 0,  1}, { 0, -1}, { 1,  0}, {-1,  0}, // Orthogonal (Rook)
+        { 1,  1}, {-1,  1}, { 1, -1}, {-1, -1}  // Diagonal (Bishop)
+    };
+
+    while (queens) {
+        int from_idx = pop_lsb(queens);
+        Square from_sq = static_cast<Square>(from_idx);
+
+        int file = from_idx & 7;
+        int rank = from_idx >> 3;
+
+        // Radiate outward along all 8 cardinal and ordinal paths
+        for (int d = 0; d < 8; ++d) {
+            int df = directions[d][0];
+            int dr = directions[d][1];
+
+            int cur_file = file + df;
+            int cur_rank = rank + dr;
+
+            while (cur_file >= 0 && cur_file < 8 && cur_rank >= 0 && cur_rank < 8) {
+                Square to_sq = static_cast<Square>((cur_rank << 3) | cur_file);
+                Bitboard to_bit = 1ULL << to_sq;
+
+                if (same_color_occ & to_bit) {
+                    break;
+                }
+
+                if (opp_color_occ & to_bit) {
+                    move_list[(*move_count)++] = Move(from_sq, to_sq, CAPTURE);
+                    break;
+                }
+
+                move_list[(*move_count)++] = Move(from_sq, to_sq, QUIET);
+
+                cur_file += df;
+                cur_rank += dr;
+            }
+        }
+    }
+}
+

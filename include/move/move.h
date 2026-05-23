@@ -61,4 +61,5 @@ struct Move {
     constexpr MoveFlag flag() const {
         return MoveFlag((data >> 12) & 0x0F);
     }
+    void print_into_algebraic() const;
 };

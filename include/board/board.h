@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
 #include <move/move.h>
+#include <string>
+#include <iostream>
 using u64 = uint64_t;
 using Bitboard = uint64_t;
 enum Colour : uint8_t{
@@ -79,4 +81,7 @@ public:
     u64 get_bishop_attacks(Square square, u64 blockers) const;
     u64 get_rook_attacks(Square square, u64 blockers) const;
     void reset();
+    void clearBoard();
+    void Parse_FEN(const std::string& fen);
+    Piece char_to_piece(char c);
 };

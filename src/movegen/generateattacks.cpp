@@ -230,7 +230,7 @@ void generateKingMoves(const Board &board, Move *move_list, Colour colour, int *
     u64 king = (colour == WHITE)?board.pieces[WK]:board.pieces[BK];
     while(king){
         int from = pop_lsb(king);
-        u64 attacks = king_attacks[from];
+        u64 attacks = king_attacks[from];//in attacks.cpp
         while(attacks){
             int to = pop_lsb(attacks);
             if(!((1ULL<<to)&us)){

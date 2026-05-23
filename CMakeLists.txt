@@ -3,22 +3,27 @@ cmake_minimum_required(VERSION 3.15)
 # 1. Name your project and language
 project(ChessEngineV3 LANGUAGES CXX)
 
+# Force CMake to generate the file VS Code is asking for
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # 2. Set the C++ standard (C++20 is great for modern engines)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 3. Tell CMake where to look for your header (.h) files
-include_directories(include)
-
-# 4. Collect all your source (.cpp) files
-# For small projects, listing them manually is safest
+# 3. Collect all your source (.cpp) files
 set(SOURCES 
     src/main.cpp
     src/bitboard/bitboard.cpp
     src/board/board.cpp
     src/movegen/attacks.cpp
     src/movegen/generateattacks.cpp
+    src/move/move.cpp
 )
 
-# 5. Define the final executable output
+# 4. Define the final executable output using the project name macro
 add_executable(${PROJECT_NAME} ${SOURCES})
+add_executable(discrepancy_solver
+    debuuger.cpp
+)
+# 5. Include your local headers directory
+target_include_directories(${PROJECT_NAME} PRIVATE include)

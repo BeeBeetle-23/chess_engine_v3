@@ -4,14 +4,18 @@
 #include "movegen/attacks.h"
 #include "bitboard/masks.h"
 #include <cstdint>
+#include <iostream>
+#include <string>
+#include <vector>
+#include <sstream>
 using u64 = uint64_t;
 void Board::reset() {
-    // 1. Clear all board data
+    // 1. Clear everything
     for (int p = 0; p < 12; ++p) pieces[p] = 0ULL;
     for (int sq = 0; sq < 64; ++sq) piece_on[sq] = NO_PIECE;
     for (int o = 0; o < 3; ++o) occupancies[o] = 0ULL;
     
-    // 2. Reset game state variables
+    // 2. Set basics
     side_to_move = WHITE;
     castling_rights = WK_CASTLE | WQ_CASTLE | BK_CASTLE | BQ_CASTLE;
     ep_square = NO_SQUARE;
@@ -19,26 +23,100 @@ void Board::reset() {
     fullmove_number = 1;
     ply = 0;
 
-    // 3. Place Pawns (Using your rank-major layout: Rank 2 is 8-15, Rank 7 is 48-55)
+    // 3. Place Pawns
     for (int file = 0; file < 8; ++file) {
-        add_piece(WP, static_cast<Square>(8 + file));  // a2 through h2
-        add_piece(BP, static_cast<Square>(48 + file)); // a7 through h7
+        add_piece(WP, static_cast<Square>(8 + file));
+        add_piece(BP, static_cast<Square>(48 + file));
     }
 
-    // 4. Place White Pieces (Rank 1)
+    // 4. White Pieces
     add_piece(WR, a1); add_piece(WN, b1); add_piece(WB, c1); add_piece(WQ, d1);
-    add_piece(WK, e1); add_piece(WB, f1); add_piece(WN, g1); add_piece(WR, h1);
+    add_piece(WK, e1); add_piece(WB, f1); add_piece(WN, g1); add_piece(WR, h1); // Corrected: WN on g1
 
-    // 5. Place Black Pieces (Rank 8)
+    // 5. Black Pieces
     add_piece(BR, a8); add_piece(BN, b8); add_piece(BB, c8); add_piece(BQ, d8);
     add_piece(BK, e8); add_piece(BB, f8); add_piece(BN, g8); add_piece(BR, h8);
 
-    // 6. Cache King locations
+    // 6. Caches
     king_square[WHITE] = e1;
     king_square[BLACK] = e8;
 
-    // 7. Synchronize the occupancy bitboards
     update_occupancies();
+}
+void Board::clearBoard(){
+    for(int i = 0; i<12; i++){
+        pieces[i] = 0ULL;
+    }
+    for(int i = 0; i<64; i++){
+        piece_on[i] = NO_PIECE;
+    }
+    side_to_move = BOTH;
+    castling_rights = WK_CASTLE | WQ_CASTLE | BK_CASTLE | BQ_CASTLE;
+    ep_square = NO_SQUARE;
+    halfmove_clock = 0;
+    fullmove_number = 1;
+    ply = 0;
+    king_square[WHITE] = king_square[BLACK] = NO_SQUARE;
+}
+void Board::Parse_FEN(const std::string& fen) {
+    clearBoard();
+    std::stringstream ss(fen);
+    std::string piece_part, turn_part, castle_part, ep_part, half_part, full_part;
+
+    // Split FEN by spaces
+    ss >> piece_part >> turn_part >> castle_part >> ep_part >> half_part >> full_part;
+
+    // 1. Parse Pieces (Rank 8 down to 1)
+    int rank = 7, file = 0;
+    for (char c : piece_part) {
+        if (c == '/') { rank--; file = 0; }
+        else if (isdigit(c)) { file += (c - '0'); }
+        else {
+            int sq = rank * 8 + file;
+            Piece p = char_to_piece(c); // Implement this helper below
+            add_piece(p, static_cast<Square>(sq));
+            if (p == WK) king_square[WHITE] = static_cast<Square>(sq);
+            if (p == BK) king_square[BLACK] = static_cast<Square>(sq);
+            file++;
+        }
+    }
+
+    // 2. Turn
+    side_to_move = (turn_part == "w") ? WHITE : BLACK;
+
+    // 3. Castling
+    castling_rights = 0;
+    for (char c : castle_part) {
+        if (c == 'K') castling_rights |= WK_CASTLE;
+        if (c == 'Q') castling_rights |= WQ_CASTLE;
+        if (c == 'k') castling_rights |= BK_CASTLE;
+        if (c == 'q') castling_rights |= BQ_CASTLE;
+    }
+
+    // 4. En Passant
+    if (ep_part != "-") {
+        int ep_file = ep_part[0] - 'a';
+        int ep_rank = ep_part[1] - '1';
+        ep_square = static_cast<Square>(ep_rank * 8 + ep_file);
+    } else {
+        ep_square = NO_SQUARE;
+    }
+
+    // 5. Clocks
+    halfmove_clock = std::stoi(half_part);
+    fullmove_number = std::stoi(full_part);
+
+    update_occupancies();
+}
+// Helper function to map char to your Piece enum
+Piece Board::char_to_piece(char c) {
+    switch(c) {
+        case 'P': return WP; case 'N': return WN; case 'B': return WB;
+        case 'R': return WR; case 'Q': return WQ; case 'K': return WK;
+        case 'p': return BP; case 'n': return BN; case 'b': return BB;
+        case 'r': return BR; case 'q': return BQ; case 'k': return BK;
+        default: return NO_PIECE;
+    }
 }
 u64 Board::get_bishop_attacks(Square square, u64 blockers) const
 {

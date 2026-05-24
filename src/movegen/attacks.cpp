@@ -26,19 +26,32 @@ u64 maskKnightAttacks(int sq)
 u64 maskKingAttacks(int sq)
 {
     u64 attacks = 0ULL;
-    u64 bit = 1ULL << sq;
 
-    attacks |= (bit & ~FILE_H) << 1;
-    attacks |= (bit & ~FILE_A) >> 1;
+    u64 bitboard = 1ULL << sq;
 
-    attacks |= bit << 8;
-    attacks |= bit >> 8;
+    // north
+    attacks |= (bitboard << 8);
 
-    attacks |= (bit & ~FILE_H) << 9;
-    attacks |= (bit & ~FILE_A) << 7;
+    // south
+    attacks |= (bitboard >> 8);
 
-    attacks |= (bit & ~FILE_H) >> 7;
-    attacks |= (bit & ~FILE_A) >> 9;
+    // east
+    attacks |= (bitboard & ~FILE_H) << 1;
+
+    // west
+    attacks |= (bitboard & ~FILE_A) >> 1;
+
+    // north-east
+    attacks |= (bitboard & ~FILE_H) << 9;
+
+    // north-west
+    attacks |= (bitboard & ~FILE_A) << 7;
+
+    // south-east
+    attacks |= (bitboard & ~FILE_H) >> 7;
+
+    // south-west
+    attacks |= (bitboard & ~FILE_A) >> 9;
 
     return attacks;
 }

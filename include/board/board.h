@@ -4,6 +4,7 @@
 #include <string>
 #include <iostream>
 using u64 = uint64_t;
+constexpr int MATE_SCORE = 3000000;
 using Bitboard = uint64_t;
 enum Colour : uint8_t{
     WHITE, BLACK, BOTH
@@ -84,4 +85,5 @@ public:
     void clearBoard();
     void Parse_FEN(const std::string& fen);
     Piece char_to_piece(char c);
+    char piece_to_char(Square from);
 };

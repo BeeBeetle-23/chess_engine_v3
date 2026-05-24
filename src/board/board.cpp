@@ -108,7 +108,7 @@ void Board::Parse_FEN(const std::string& fen) {
 
     update_occupancies();
 }
-// Helper function to map char to your Piece enum
+// Helper function to map char to Piece enum
 Piece Board::char_to_piece(char c) {
     switch(c) {
         case 'P': return WP; case 'N': return WN; case 'B': return WB;
@@ -116,6 +116,15 @@ Piece Board::char_to_piece(char c) {
         case 'p': return BP; case 'n': return BN; case 'b': return BB;
         case 'r': return BR; case 'q': return BQ; case 'k': return BK;
         default: return NO_PIECE;
+    }
+}
+char Board::piece_to_char(Square from) {
+    switch(piece_on[from]) {
+        case WP: return 'P'; case WN: return 'N'; case WB: return 'B';
+        case WR: return 'R'; case WQ: return 'Q'; case WK: return 'K';
+        case BP: return 'p'; case BN: return 'n'; case BB: return 'b';
+        case BR: return 'r'; case BQ: return 'q'; case BK: return 'k';
+        default: return 'X';
     }
 }
 u64 Board::get_bishop_attacks(Square square, u64 blockers) const

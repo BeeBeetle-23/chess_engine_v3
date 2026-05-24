@@ -1,4 +1,4 @@
-#include "bitboard/perft.h"
+/*#include "bitboard/perft.h"
 #include "board/board.h"
 #include "movegen/generateattacks.h"
 #include <cstdint>
@@ -52,4 +52,4 @@ void perft_divide(Board& board, int depth) {
     }
 
     std::cout << "\nTotal Nodes: " << total_nodes << "\n\n";
-}
+}*/

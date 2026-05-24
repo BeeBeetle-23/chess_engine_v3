@@ -20,6 +20,7 @@ set(SOURCES
     src/move/move.cpp
     src/bitboard/perft.cpp
     src/evaluation/evaluation.cpp
+    src/search/search.cpp
 )
 
 # 4. Define the final executable output using the project name macro

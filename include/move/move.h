@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-
+class Board;
 enum Square : uint8_t {
     a1, b1, c1, d1, e1, f1, g1, h1,
     a2, b2, c2, d2, e2, f2, g2, h2,
@@ -61,5 +61,5 @@ struct Move {
     constexpr MoveFlag flag() const {
         return MoveFlag((data >> 12) & 0x0F);
     }
-    void print_into_algebraic() const;
+    void print_into_algebraic(Board &board) const;
 };

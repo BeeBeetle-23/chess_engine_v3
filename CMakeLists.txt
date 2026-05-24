@@ -18,12 +18,12 @@ set(SOURCES
     src/movegen/attacks.cpp
     src/movegen/generateattacks.cpp
     src/move/move.cpp
+    src/bitboard/perft.cpp
+    src/evaluation/evaluation.cpp
 )
 
 # 4. Define the final executable output using the project name macro
 add_executable(${PROJECT_NAME} ${SOURCES})
-add_executable(discrepancy_solver
-    debuuger.cpp
-)
+
 # 5. Include your local headers directory
 target_include_directories(${PROJECT_NAME} PRIVATE include)

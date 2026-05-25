@@ -3,11 +3,13 @@
 #include "bitboard/bitboard.h"
 #include "movegen/attacks.h"
 #include "bitboard/masks.h"
+#include "movegen/generateattacks.h"
 #include <cstdint>
 #include <iostream>
 #include <string>
 #include <vector>
 #include <sstream>
+#include <string>
 using u64 = uint64_t;
 void Board::reset() {
     // 1. Clear everything
@@ -108,7 +110,6 @@ void Board::Parse_FEN(const std::string& fen) {
 
     update_occupancies();
 }
-// Helper function to map char to Piece enum
 Piece Board::char_to_piece(char c) {
     switch(c) {
         case 'P': return WP; case 'N': return WN; case 'B': return WB;
@@ -678,3 +679,5 @@ void Board::undo_move(){
     }
     update_occupancies();
 }
+
+

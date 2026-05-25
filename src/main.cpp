@@ -7,14 +7,12 @@
 #include "bitboard/perft.h"
 #include "search/search.h"
 #include <array>
+#include "uci/uci.h"
 #include <vector>
 using u64 = uint64_t;
 int main(){
-    Board board;
     initAttackTables();
-    board.clearBoard();
-    board.Parse_FEN("1k5r/pp6/4q3/1N6/8/P4Q2/1PP5/1K6 w - - 0 1");
-    Move best = findBestMove(board,6);
-    best.print_into_algebraic(board);
+    Board board;
+    uci_loop(board);
     return 0;
 }

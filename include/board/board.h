@@ -85,5 +85,11 @@ public:
     void clearBoard();
     void Parse_FEN(const std::string& fen);
     Piece char_to_piece(char c);
-    char piece_to_char(Square from);
+    char piece_to_char(Square from);;
 };
+inline bool is_in_check(const Board &board){
+    Colour us = board.side_to_move;
+    Colour them = static_cast<Colour>(board.side_to_move^1);
+    if(board.isSquareAttacked(board.king_square[us],them)) return true;
+    return false;
+}

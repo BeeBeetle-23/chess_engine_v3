@@ -2,6 +2,8 @@
 int evaluate(const Board &board);
 int get_base_value(int p);
 int get_positional_value(int p, int square);
+int getMVVLVA(const Board& board, Move move);
+void scoreMoves(const Board &board, ScoredMove moves,int count);
 inline constexpr int piece_value[12] = {
     100, 320, 335, 500, 900, 20000, // White: P, N, B, R, Q, K
     100, 320, 335, 500, 900, 20000  // Black: p, n, b, r, q, k

@@ -26,13 +26,11 @@ void validate_board(const Board& b) {
 int negamax(Board &board, int depth, int alpha, int beta) {
     assert(depth >= 0 && "depth went negative");
 
-    // --- Leaf node FIRST — avoids paying move gen cost at every leaf ---
     if (depth == 0) {
         int side = (board.side_to_move == WHITE) ? 1 : -1;
         return side * evaluate(board);
     }
 
-    // Static buffer per call — consider heap allocation if Move grows large
     Move move_list[256];
     int  legalCount = 0;
 
@@ -72,26 +70,34 @@ Move findBestMove(Board &board, int depth) {
 
     validate_board(board); // validate once at root, not inside the loop
 
-    Move move_list[256];
+    ScoredMove move_list;
     int  legalCount = 0;
 
-    generateLegalMoves(board, move_list, board.side_to_move, &legalCount);
+    generateLegalMoves(board, move_list.move, board.side_to_move, &legalCount);
 
     if (legalCount == 0) return Move(); // caller must handle null move
 
-    Move best_move  = move_list[0];
+    Move best_move  = move_list.move[0];
     int  best_score = -INF - 1; // same fix: must be beatable by -MATE_SCORE
     int  alpha      = -INF - 1;
     int  beta       =  INF;
-
+    scoreMoves(board,move_list,legalCount);
     for (int i = 0; i < legalCount; i++) {
-        board.make_move(move_list[i]);
+        int best = i;
+        //Shallow sorting
+        for(int j = i+1; j<legalCount; j++){
+            if(move_list.score[j] > move_list.score[best]) best = j;
+        }
+        std::swap(move_list.move[i],move_list.move[best]);
+        std::swap(move_list.score[i],move_list.score[best]);
+
+        board.make_move(move_list.move[i]);
         int score = -negamax(board, depth - 1, -beta, -alpha);
         board.undo_move();
 
         if (score > best_score) {
             best_score = score;
-            best_move  = move_list[i];
+            best_move  = move_list.move[i];
         }
 
         // Tighten the window for subsequent root moves

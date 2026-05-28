@@ -64,3 +64,8 @@ struct Move {
     }
     void move_into_algebraic() const;
 };
+
+struct ScoredMove{
+    Move move[256];
+    int score[256];
+};

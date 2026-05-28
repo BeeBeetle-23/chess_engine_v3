@@ -5,6 +5,22 @@
 int get_base_value(int p){
     return piece_value[p];
 }
+constexpr int MVV_LVA[6][6] = {
+// attacker: P  N  B  R  Q  K
+    {15,14,13,12,11,10}, // victim pawn
+    {25,24,23,22,21,20}, // victim knight
+    {35,34,33,32,31,30}, // victim bishop
+    {45,44,43,42,41,40}, // victim rook
+    {55,54,53,52,51,50}, // victim queen
+    {0,0,0,0,0,0}
+};
+
+int getMVVLVA(const Board& board, Move move) {
+    // Get attacker type (0-5 regardless of colour)
+    int attacker = board.piece_on[move.from()] % 6;
+    int victim   = board.piece_on[move.to()]   % 6;
+    return MVV_LVA[victim][attacker];
+}
 int get_positional_value(int p,int square){
     switch(p){
         case 0:{return pawn_square_table[square];}
@@ -38,3 +54,18 @@ int evaluate(const Board &board){
     }
     return score;
 }
+void scoreMoves(const Board &board, ScoredMove moves,int count){
+    for(int i = 0; i<count; i++){
+        const MoveFlag flag = moves.move[i].flag();
+        switch(flag){
+            case QUEEN_PROMO_CAPTURE: moves.score[i] = 9'000'000;break;
+            case ROOK_PROMO_CAPTURE: moves.score[i] = 8'000'000;break;
+            case BISHOP_PROMO_CAPTURE:
+            case KNIGHT_PROMO_CAPTURE:
+            case CAPTURE:{
+            moves.score[i] = 7'000'000 + getMVVLVA(board, moves.move[i]);break;}
+            case EP_CAPTURE: moves.score[i] = 7'000'000;break;
+            default: moves.score[i] = 0;break;
+        }
+    }
+} 

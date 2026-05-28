@@ -4,7 +4,7 @@
 #include <string>
 #include <iostream>
 using u64 = uint64_t;
-constexpr int MATE_SCORE = 3000000;
+constexpr int MATE_SCORE = 999000;
 using Bitboard = uint64_t;
 enum Colour : uint8_t{
     WHITE, BLACK, BOTH

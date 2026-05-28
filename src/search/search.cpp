@@ -3,101 +3,102 @@
 #include "movegen/generateattacks.h"
 #include "bitboard/bitboard.h"
 #include <algorithm>
-constexpr int INF = 1000000;
-int negamax(Board &board, int depth, int alpha, int beta)
-{
-    Move move_list[256];
-    int legalCount = 0;
+#include <cassert>
+constexpr int INF       = 1000000;
 
-    generateLegalMoves(board, move_list, board.side_to_move, &legalCount);
+void validate_board(const Board& b) {
+    u64 white = 0ULL;
+    for (int p = WP; p <= WK; p++) white |= b.pieces[p];
+    assert(white == b.occupancies[WHITE] && "white occupancy mismatch");
 
-    // Terminal positions FIRST
-    if (legalCount == 0)
-    {
-        if (is_in_check(board))
-        {
-            // Side to move is checkmated
-            return -MATE_SCORE + board.ply;
-        }
+    u64 black = 0ULL;
+    for (int p = BP; p <= BK; p++) black |= b.pieces[p];
+    assert(black == b.occupancies[BLACK] && "black occupancy mismatch");
 
-        // Stalemate
-        return 0;
-    }
+    assert((white & black) == 0ULL      && "white/black pieces overlap");
+    assert((white | black) == b.occupancies[BOTH] && "BOTH occupancy mismatch");
 
-    // Leaf node evaluation
-    if (depth == 0)
-    {
+    // King sanity
+    assert(__builtin_popcountll(b.pieces[WK]) == 1 && "white must have exactly 1 king");
+    assert(__builtin_popcountll(b.pieces[BK]) == 1 && "black must have exactly 1 king");
+}
+
+int negamax(Board &board, int depth, int alpha, int beta) {
+    assert(depth >= 0 && "depth went negative");
+
+    // --- Leaf node FIRST — avoids paying move gen cost at every leaf ---
+    if (depth == 0) {
         int side = (board.side_to_move == WHITE) ? 1 : -1;
         return side * evaluate(board);
     }
 
-    int best_score = -INF;
+    // Static buffer per call — consider heap allocation if Move grows large
+    Move move_list[256];
+    int  legalCount = 0;
 
-    for (int i = 0; i < legalCount; i++)
-    {
+    generateLegalMoves(board, move_list, board.side_to_move, &legalCount);
+
+    if (legalCount == 0) {
+        // No legal moves: checkmate or stalemate
+        // board.ply must be incremented by make_move and decremented by undo_move
+        return is_in_check(board) ? (-MATE_SCORE + board.ply) : 0;
+    }
+
+    int best_score = -INF - 1; // one below -INF so even -MATE_SCORE beats it
+
+    for (int i = 0; i < legalCount; i++) {
         board.make_move(move_list[i]);
+
+        // Validate only in debug, and only to catch make_move/undo_move bugs
+        // — not every node in production
+        assert((validate_board(board), true));
 
         int score = -negamax(board, depth - 1, -beta, -alpha);
 
         board.undo_move();
 
-        if (score > best_score)
-        {
-            best_score = score;
-        }
+        assert((validate_board(board), true));
 
-        if (best_score > alpha)
-        {
-            alpha = best_score;
-        }
-
-        // Beta cutoff
-        if (alpha >= beta)
-        {
-            break;
-        }
+        if (score > best_score) best_score = score;
+        if (score > alpha)      alpha      = score;
+        if (alpha >= beta)      break;       // beta cutoff
     }
 
     return best_score;
 }
 
-Move findBestMove(Board &board, int depth)
-{
+Move findBestMove(Board &board, int depth) {
+    assert(depth >= 1 && "search depth must be at least 1");
+
+    validate_board(board); // validate once at root, not inside the loop
+
     Move move_list[256];
-    int legalCount = 0;
+    int  legalCount = 0;
 
     generateLegalMoves(board, move_list, board.side_to_move, &legalCount);
 
-    if (legalCount == 0)
-    {
-        return Move();
-    }
+    if (legalCount == 0) return Move(); // caller must handle null move
 
-    Move best_move = move_list[0];
+    Move best_move  = move_list[0];
+    int  best_score = -INF - 1; // same fix: must be beatable by -MATE_SCORE
+    int  alpha      = -INF - 1;
+    int  beta       =  INF;
 
-    int best_score = -INF;
-
-    int alpha = -INF;
-    int beta  = INF;
-
-    for (int i = 0; i < legalCount; i++)
-    {
+    for (int i = 0; i < legalCount; i++) {
         board.make_move(move_list[i]);
-
         int score = -negamax(board, depth - 1, -beta, -alpha);
-
         board.undo_move();
 
-        if (score > best_score)
-        {
+        if (score > best_score) {
             best_score = score;
-            best_move = move_list[i];
+            best_move  = move_list[i];
         }
 
-        if (score > alpha)
-        {
-            alpha = score;
-        }
+        // Tighten the window for subsequent root moves
+        if (score > alpha) alpha = score;
+
+        // No beta cutoff at root — we need to find the actual best move,
+        // not just prove a bound. All root moves must be searched.
     }
 
     return best_move;

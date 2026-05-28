@@ -8,11 +8,11 @@
 #include "search/search.h"
 #include <array>
 #include "uci/uci.h"
-#include <vector>
+#include <cassert>
 using u64 = uint64_t;
 int main(){
     initAttackTables();
-    Board board;
+    Board board;;
     uci_loop(board);
     return 0;
 }

@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.15)
 # 1. Name your project and language
 project(ChessEngineV3 LANGUAGES CXX)
 
+
 # Force CMake to generate the file VS Code is asking for
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 

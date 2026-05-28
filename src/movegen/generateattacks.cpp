@@ -5,331 +5,279 @@
 #include "movegen/generateattacks.h"
 #include "bitboard/bitboard.h"
 #include <bit>
+#include <cassert>
+static constexpr int MAX_MOVES = 256;
 using u64 = uint64_t;
 
 void generatePawnMoves(const Board &board, Move *move_list, Colour colour, int *move_count) {
-    u64 empty_squares = ~board.occupancies[BOTH];
+    // --- Entry guards ---
+    assert(move_list  != nullptr        && "move_list is null");
+    assert(move_count != nullptr        && "move_count is null");
+    assert(*move_count >= 0             && "move_count is negative");
+    assert(*move_count < MAX_MOVES      && "move_list already full on entry");
+    assert(board.ep_square == NO_SQUARE || 
+           board.ep_square < 64         && "ep_square out of range");
 
-    // Build the en passant target bitboard
-    // (Assumes an invalid/unset EP square has a value >= 64, like NO_SQUARE)
-    u64 ep_bitboard = (board.ep_square < 64) ? (1ULL << board.ep_square) : 0ULL;
+    // Safe EP — explicitly compare against your sentinel,
+    // not < 64, which silently passes on -1 or 255 depending on signedness
+    const u64 ep_bitboard = (board.ep_square != NO_SQUARE)
+                          ? (1ULL << board.ep_square)
+                          : 0ULL;
+
+    const u64 empty_squares = ~board.occupancies[BOTH];
+
+    // Bounds-checked push: every single move write goes through here
+    const auto push_move = [&](Move m) {
+        assert(*move_count < MAX_MOVES && "move_list overflow in generatePawnMoves");
+        move_list[(*move_count)++] = m;
+    };
 
     if (colour == WHITE) {
-        u64 enemy_pieces = board.occupancies[BLACK];
-        
-        u64 single_pushes = (board.pieces[WP] << 8) & empty_squares;
-        u64 double_pushes = ((single_pushes & RANK_3) << 8) & empty_squares;
-        u64 left_captures  = (board.pieces[WP] & ~FILE_A) << 7 & enemy_pieces;
-        u64 right_captures = (board.pieces[WP] & ~FILE_H) << 9 & enemy_pieces;
+        const u64 enemy_pieces = board.occupancies[BLACK];
 
-        // Parallel En Passant bitboard calculations
-        u64 left_ep  = (board.pieces[WP] & ~FILE_A) << 7 & ep_bitboard;
-        u64 right_ep = (board.pieces[WP] & ~FILE_H) << 9 & ep_bitboard;
+        // -------------------------------------------------------
+        // PUSHES — bulk bitboard (attack table doesn't model these)
+        // -------------------------------------------------------
+        const u64 single_pushes = (board.pieces[WP] << 8) & empty_squares;
+        const u64 double_pushes = ((single_pushes & RANK_3) << 8) & empty_squares;
 
-        // 1. Single Pushes
         u64 normal_pushes = single_pushes & ~RANK_8;
         while (normal_pushes) {
-            int to_sq = __builtin_ctzll(normal_pushes);
-            int from_sq = to_sq - 8;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, QUIET);
+            const int to_sq = __builtin_ctzll(normal_pushes);
+            push_move(Move((Square)(to_sq - 8), (Square)to_sq, QUIET));
             normal_pushes &= normal_pushes - 1;
         }
 
         u64 promo_pushes = single_pushes & RANK_8;
         while (promo_pushes) {
-            int to_sq = __builtin_ctzll(promo_pushes);
-            int from_sq = to_sq - 8;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, QUEEN_PROMOTION);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, ROOK_PROMOTION);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, BISHOP_PROMOTION);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, KNIGHT_PROMOTION);
+            const int   to_sq   = __builtin_ctzll(promo_pushes);
+            const Square from_sq = (Square)(to_sq - 8);
+            push_move(Move(from_sq, (Square)to_sq, QUEEN_PROMOTION));
+            push_move(Move(from_sq, (Square)to_sq, ROOK_PROMOTION));
+            push_move(Move(from_sq, (Square)to_sq, BISHOP_PROMOTION));
+            push_move(Move(from_sq, (Square)to_sq, KNIGHT_PROMOTION));
             promo_pushes &= promo_pushes - 1;
         }
 
-        // 2. Double Pushes
-        while (double_pushes) {
-            int to_sq = __builtin_ctzll(double_pushes);
-            int from_sq = to_sq - 16;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, DOUBLE_PAWN_PUSH);
-            double_pushes &= double_pushes - 1;
+        u64 dbl = double_pushes;
+        while (dbl) {
+            const int to_sq = __builtin_ctzll(dbl);
+            push_move(Move((Square)(to_sq - 16), (Square)to_sq, DOUBLE_PAWN_PUSH));
+            dbl &= dbl - 1;
         }
 
-        // 3. Left Captures
-        u64 normal_left = left_captures & ~RANK_8;
-        while (normal_left) {
-            int to_sq = __builtin_ctzll(normal_left);
-            int from_sq = to_sq - 7;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, CAPTURE);
-            normal_left &= normal_left - 1;
+        // -------------------------------------------------------
+        // CAPTURES + EP — per-pawn via attack table
+        // from_sq is known directly; no offset arithmetic needed,
+        // and FILE_A/FILE_H wrapping is already baked into the table
+        // -------------------------------------------------------
+        u64 pawns = board.pieces[WP];
+        while (pawns) {
+            const int from_sq   = __builtin_ctzll(pawns);
+            const u64 attacks   = pawn_attacks[WHITE][from_sq]; // precomputed, wrap-safe
+
+            // Normal + promo captures
+            u64 captures = attacks & enemy_pieces;
+            while (captures) {
+                const int to_sq = __builtin_ctzll(captures);
+                if ((1ULL << to_sq) & RANK_8) {
+                    push_move(Move((Square)from_sq, (Square)to_sq, QUEEN_PROMO_CAPTURE));
+                    push_move(Move((Square)from_sq, (Square)to_sq, ROOK_PROMO_CAPTURE));
+                    push_move(Move((Square)from_sq, (Square)to_sq, BISHOP_PROMO_CAPTURE));
+                    push_move(Move((Square)from_sq, (Square)to_sq, KNIGHT_PROMO_CAPTURE));
+                } else {
+                    push_move(Move((Square)from_sq, (Square)to_sq, CAPTURE));
+                }
+                captures &= captures - 1;
+            }
+
+            // En passant
+            u64 ep = attacks & ep_bitboard;
+            while (ep) {
+                const int to_sq = __builtin_ctzll(ep);
+                // Sanity: EP target must be on rank 6 for white
+                assert(((1ULL << to_sq) & RANK_6) && "white EP target not on rank 6");
+                push_move(Move((Square)from_sq, (Square)to_sq, EP_CAPTURE));
+                ep &= ep - 1;
+            }
+
+            pawns &= pawns - 1;
         }
 
-        u64 promo_left = left_captures & RANK_8;
-        while (promo_left) {
-            int to_sq = __builtin_ctzll(promo_left);
-            int from_sq = to_sq - 7;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, QUEEN_PROMO_CAPTURE);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, ROOK_PROMO_CAPTURE);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, BISHOP_PROMO_CAPTURE);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, KNIGHT_PROMO_CAPTURE);
-            promo_left &= promo_left - 1;
-        }
+    } else { // BLACK
 
-        // 4. Right Captures
-        u64 normal_right = right_captures & ~RANK_8;
-        while (normal_right) {
-            int to_sq = __builtin_ctzll(normal_right);
-            int from_sq = to_sq - 9;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, CAPTURE);
-            normal_right &= normal_right - 1;
-        }
+        const u64 enemy_pieces = board.occupancies[WHITE];
 
-        u64 promo_right = right_captures & RANK_8;
-        while (promo_right) {
-            int to_sq = __builtin_ctzll(promo_right);
-            int from_sq = to_sq - 9;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, QUEEN_PROMO_CAPTURE);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, ROOK_PROMO_CAPTURE);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, BISHOP_PROMO_CAPTURE);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, KNIGHT_PROMO_CAPTURE);
-            promo_right &= promo_right - 1;
-        }
+        // -------------------------------------------------------
+        // PUSHES
+        // -------------------------------------------------------
+        const u64 single_pushes = (board.pieces[BP] >> 8) & empty_squares;
+        const u64 double_pushes = ((single_pushes & RANK_6) >> 8) & empty_squares;
 
-        // 5. En Passant Captures
-        while (left_ep) {
-            int to_sq = __builtin_ctzll(left_ep);
-            int from_sq = to_sq - 7;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, EP_CAPTURE);
-            left_ep &= left_ep - 1;
-        }
-        while (right_ep) {
-            int to_sq = __builtin_ctzll(right_ep);
-            int from_sq = to_sq - 9;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, EP_CAPTURE);
-            right_ep &= right_ep - 1;
-        }
-    } 
-    else { // BLACK
-        u64 enemy_pieces = board.occupancies[WHITE];
-        
-        u64 single_pushes = (board.pieces[BP] >> 8) & empty_squares;
-        u64 double_pushes = ((single_pushes & RANK_6) >> 8) & empty_squares;
-        u64 left_captures  = (board.pieces[BP] & ~FILE_A) >> 9 & enemy_pieces;
-        u64 right_captures = (board.pieces[BP] & ~FILE_H) >> 7 & enemy_pieces;
-
-        // Parallel En Passant bitboard calculations
-        u64 left_ep  = (board.pieces[BP] & ~FILE_A) >> 9 & ep_bitboard;
-        u64 right_ep = (board.pieces[BP] & ~FILE_H) >> 7 & ep_bitboard;
-
-        // 1. Single Pushes
         u64 normal_pushes = single_pushes & ~RANK_1;
         while (normal_pushes) {
-            int to_sq = __builtin_ctzll(normal_pushes);
-            int from_sq = to_sq + 8;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, QUIET);
+            const int to_sq = __builtin_ctzll(normal_pushes);
+            push_move(Move((Square)(to_sq + 8), (Square)to_sq, QUIET));
             normal_pushes &= normal_pushes - 1;
         }
 
         u64 promo_pushes = single_pushes & RANK_1;
         while (promo_pushes) {
-            int to_sq = __builtin_ctzll(promo_pushes);
-            int from_sq = to_sq + 8;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, QUEEN_PROMOTION);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, ROOK_PROMOTION);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, BISHOP_PROMOTION);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, KNIGHT_PROMOTION);
+            const int    to_sq   = __builtin_ctzll(promo_pushes);
+            const Square from_sq = (Square)(to_sq + 8);
+            push_move(Move(from_sq, (Square)to_sq, QUEEN_PROMOTION));
+            push_move(Move(from_sq, (Square)to_sq, ROOK_PROMOTION));
+            push_move(Move(from_sq, (Square)to_sq, BISHOP_PROMOTION));
+            push_move(Move(from_sq, (Square)to_sq, KNIGHT_PROMOTION));
             promo_pushes &= promo_pushes - 1;
         }
 
-        // 2. Double Pushes
-        while (double_pushes) {
-            int to_sq = __builtin_ctzll(double_pushes);
-            int from_sq = to_sq + 16;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, DOUBLE_PAWN_PUSH);
-            double_pushes &= double_pushes - 1;
+        u64 dbl = double_pushes;
+        while (dbl) {
+            const int to_sq = __builtin_ctzll(dbl);
+            push_move(Move((Square)(to_sq + 16), (Square)to_sq, DOUBLE_PAWN_PUSH));
+            dbl &= dbl - 1;
         }
 
-        // 3. Left Captures
-        u64 normal_left = left_captures & ~RANK_1;
-        while (normal_left) {
-            int to_sq = __builtin_ctzll(normal_left);
-            int from_sq = to_sq + 9;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, CAPTURE);
-            normal_left &= normal_left - 1;
-        }
+        // -------------------------------------------------------
+        // CAPTURES + EP
+        // -------------------------------------------------------
+        u64 pawns = board.pieces[BP];
+        while (pawns) {
+            const int from_sq = __builtin_ctzll(pawns);
+            const u64 attacks  = pawn_attacks[BLACK][from_sq];
 
-        u64 promo_left = left_captures & RANK_1;
-        while (promo_left) {
-            int to_sq = __builtin_ctzll(promo_left);
-            int from_sq = to_sq + 9;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, QUEEN_PROMO_CAPTURE);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, ROOK_PROMO_CAPTURE);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, BISHOP_PROMO_CAPTURE);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, KNIGHT_PROMO_CAPTURE);
-            promo_left &= promo_left - 1;
-        }
+            u64 captures = attacks & enemy_pieces;
+            while (captures) {
+                const int to_sq = __builtin_ctzll(captures);
+                if ((1ULL << to_sq) & RANK_1) {
+                    push_move(Move((Square)from_sq, (Square)to_sq, QUEEN_PROMO_CAPTURE));
+                    push_move(Move((Square)from_sq, (Square)to_sq, ROOK_PROMO_CAPTURE));
+                    push_move(Move((Square)from_sq, (Square)to_sq, BISHOP_PROMO_CAPTURE));
+                    push_move(Move((Square)from_sq, (Square)to_sq, KNIGHT_PROMO_CAPTURE));
+                } else {
+                    push_move(Move((Square)from_sq, (Square)to_sq, CAPTURE));
+                }
+                captures &= captures - 1;
+            }
 
-        // 4. Right Captures
-        u64 normal_right = right_captures & ~RANK_1;
-        while (normal_right) {
-            int to_sq = __builtin_ctzll(normal_right);
-            int from_sq = to_sq + 7;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, CAPTURE);
-            normal_right &= normal_right - 1;
-        }
+            u64 ep = attacks & ep_bitboard;
+            while (ep) {
+                const int to_sq = __builtin_ctzll(ep);
+                // Sanity: EP target must be on rank 3 for black
+                assert(((1ULL << to_sq) & RANK_3) && "black EP target not on rank 3");
+                push_move(Move((Square)from_sq, (Square)to_sq, EP_CAPTURE));
+                ep &= ep - 1;
+            }
 
-        u64 promo_right = right_captures & RANK_1;
-        while (promo_right) {
-            int to_sq = __builtin_ctzll(promo_right);
-            int from_sq = to_sq + 7;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, QUEEN_PROMO_CAPTURE);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, ROOK_PROMO_CAPTURE);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, BISHOP_PROMO_CAPTURE);
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, KNIGHT_PROMO_CAPTURE);
-            promo_right &= promo_right - 1;
-        }
-
-        // 5. En Passant Captures
-        while (left_ep) {
-            int to_sq = __builtin_ctzll(left_ep);
-            int from_sq = to_sq + 9;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, EP_CAPTURE);
-            left_ep &= left_ep - 1;
-        }
-        while (right_ep) {
-            int to_sq = __builtin_ctzll(right_ep);
-            int from_sq = to_sq + 7;
-            move_list[(*move_count)++] = Move((Square)from_sq, (Square)to_sq, EP_CAPTURE);
-            right_ep &= right_ep - 1;
+            pawns &= pawns - 1;
         }
     }
 }
 
-void generateKnightMoves(const Board &board, Move *move_list, Colour colour, int *move_count){
-    u64 us = (colour == WHITE)?board.occupancies[WHITE]:board.occupancies[BLACK];
-    u64 enemy = (colour == WHITE)?board.occupancies[BLACK]:board.occupancies[WHITE];
-    u64 knights = (colour == WHITE)?board.pieces[WN]:board.pieces[BN];
-    while(knights){
-        int from = pop_lsb(knights);
-        u64 attacks = knight_attacks[from];
-        while(attacks){
-            int to = pop_lsb(attacks);
-            if(!((1ULL<<to)&us)){
-                MoveFlag flag = ((1ULL << to) & enemy)? CAPTURE: QUIET;
+void generateKnightMoves(const Board &board, Move *move_list, Colour colour, int *move_count) {
+    assert(move_list  != nullptr   && "move_list is null");
+    assert(move_count != nullptr   && "move_count is null");
+    assert(*move_count >= 0        && "move_count negative");
+    assert(*move_count < MAX_MOVES && "move_list full on entry");
 
-                move_list[(*move_count)++] = Move ((Square)from, (Square)to, flag);
-            }
+    const auto push_move = [&](Move m) {
+        assert(*move_count < MAX_MOVES && "move_list overflow in generateKnightMoves");
+        move_list[(*move_count)++] = m;
+    };
 
+    const u64 us     = board.occupancies[colour];
+    const u64 enemy  = board.occupancies[colour == WHITE ? BLACK : WHITE];
+    u64 knights      = board.pieces[colour == WHITE ? WN : BN];
+
+    while (knights) {
+        const int from_sq = __builtin_ctzll(knights);     // ← explicit, no pop_lsb ambiguity
+        knights &= knights - 1;
+
+        u64 attacks = knight_attacks[from_sq] & ~us;      // mask own pieces up front
+        while (attacks) {
+            const int to_sq = __builtin_ctzll(attacks);
+            attacks &= attacks - 1;
+
+            const MoveFlag flag = (1ULL << to_sq) & enemy ? CAPTURE : QUIET;
+            push_move(Move((Square)from_sq, (Square)to_sq, flag));
         }
     }
-
 }
 
-void generateKingMoves(const Board &board, Move *move_list, Colour colour, int *move_count){
-    u64 us = (colour == WHITE)?board.occupancies[WHITE]:board.occupancies[BLACK];
-    u64 enemy = (colour == WHITE)?board.occupancies[BLACK]:board.occupancies[WHITE];
-    u64 king = (colour == WHITE)?board.pieces[WK]:board.pieces[BK];
-    while(king){
-        int from = pop_lsb(king);
-        u64 attacks = king_attacks[from];//in attacks.cpp
-        while(attacks){
-            int to = pop_lsb(attacks);
-            if(!((1ULL<<to)&us)){
-                MoveFlag flag = ((1ULL << to) & enemy)? CAPTURE: QUIET;
+void generateKingMoves(const Board &board, Move *move_list, Colour colour, int *move_count) {
+    assert(move_list  != nullptr   && "move_list is null");
+    assert(move_count != nullptr   && "move_count is null");
+    assert(*move_count >= 0        && "move_count negative");
+    assert(*move_count < MAX_MOVES && "move_list full on entry");
 
-                move_list[(*move_count)++] = Move ((Square)from, (Square)to, flag);
-            }
+    const auto push_move = [&](Move m) {
+        assert(*move_count < MAX_MOVES && "move_list overflow in generateKingMoves");
+        move_list[(*move_count)++] = m;
+    };
 
+    const u64 us    = board.occupancies[colour];
+    const u64 enemy = board.occupancies[colour == WHITE ? BLACK : WHITE];
+    u64 king        = board.pieces[colour == WHITE ? WK : BK];
+
+    // Exactly one king must exist
+    assert(__builtin_popcountll(king) == 1 && "king bitboard does not have exactly 1 bit");
+
+    while (king) {
+        const int from_sq = __builtin_ctzll(king);
+        king &= king - 1;
+
+        u64 attacks = king_attacks[from_sq] & ~us;
+        while (attacks) {
+            const int to_sq = __builtin_ctzll(attacks);
+            attacks &= attacks - 1;
+
+            const MoveFlag flag = (1ULL << to_sq) & enemy ? CAPTURE : QUIET;
+            push_move(Move((Square)from_sq, (Square)to_sq, flag));
         }
     }
-     if (colour == WHITE)
-        {
 
-            if (board.castling_rights & WK_CASTLE)
-            {
-                if (!(board.occupancies[BOTH] &
-                    ((1ULL << f1) |
-                     (1ULL << g1))))
-                {
-                    if (!board.isSquareAttacked(e1, BLACK) &&
-                        !board.isSquareAttacked(f1, BLACK) &&
-                        !board.isSquareAttacked(g1, BLACK))
-                    {
-                        move_list[(*move_count)++] =
-                            Move(
-                                e1,
-                                g1,
-                                KING_CASTLE
-                            );
-                    }
-                }
-            }
-
-            if (board.castling_rights & WQ_CASTLE)
-            {
-                if (!(board.occupancies[BOTH] &
-                    ((1ULL << b1) |
-                     (1ULL << c1) |
-                     (1ULL << d1))))
-                {
-                    if (!board.isSquareAttacked(e1, BLACK) &&
-                        !board.isSquareAttacked(d1, BLACK) &&
-                        !board.isSquareAttacked(c1, BLACK))
-                    {
-                        move_list[(*move_count)++] =
-                            Move(
-                                e1,
-                                c1,
-                                QUEEN_CASTLE
-                            );
-                    }
+    // Castling — structure unchanged, just routed through push_move
+    if (colour == WHITE) {
+        if (board.castling_rights & WK_CASTLE) {
+            if (!(board.occupancies[BOTH] & ((1ULL << f1) | (1ULL << g1)))) {
+                if (!board.isSquareAttacked(e1, BLACK) &&
+                    !board.isSquareAttacked(f1, BLACK) &&
+                    !board.isSquareAttacked(g1, BLACK)) {
+                    push_move(Move(e1, g1, KING_CASTLE));
                 }
             }
         }
-        else
-        {
-
-            if (board.castling_rights & BK_CASTLE)
-            {
-                if (!(board.occupancies[BOTH] &
-                    ((1ULL << f8) |
-                     (1ULL << g8))))
-                {
-                    if (!board.isSquareAttacked(e8, WHITE) &&
-                        !board.isSquareAttacked(f8, WHITE) &&
-                        !board.isSquareAttacked(g8, WHITE))
-                    {
-                        move_list[(*move_count)++] =
-                            Move(
-                                e8,
-                                g8,
-                                KING_CASTLE
-                            );
-                    }
+        if (board.castling_rights & WQ_CASTLE) {
+            if (!(board.occupancies[BOTH] & ((1ULL << b1) | (1ULL << c1) | (1ULL << d1)))) {
+                if (!board.isSquareAttacked(e1, BLACK) &&
+                    !board.isSquareAttacked(d1, BLACK) &&
+                    !board.isSquareAttacked(c1, BLACK)) {
+                    push_move(Move(e1, c1, QUEEN_CASTLE));
                 }
             }
-
-            if (board.castling_rights & BQ_CASTLE)
-            {
-                if (!(board.occupancies[BOTH] &
-                    ((1ULL << b8) |
-                     (1ULL << c8) |
-                     (1ULL << d8))))
-                {
-                    if (!board.isSquareAttacked(e8, WHITE) &&
-                        !board.isSquareAttacked(d8, WHITE) &&
-                        !board.isSquareAttacked(c8, WHITE))
-                    {
-                        move_list[(*move_count)++] =
-                            Move(
-                                e8,
-                                c8,
-                                QUEEN_CASTLE
-                            );
-                    }
+        }
+    } else {
+        if (board.castling_rights & BK_CASTLE) {
+            if (!(board.occupancies[BOTH] & ((1ULL << f8) | (1ULL << g8)))) {
+                if (!board.isSquareAttacked(e8, WHITE) &&
+                    !board.isSquareAttacked(f8, WHITE) &&
+                    !board.isSquareAttacked(g8, WHITE)) {
+                    push_move(Move(e8, g8, KING_CASTLE));
+                }
+            }
+        }
+        if (board.castling_rights & BQ_CASTLE) {
+            if (!(board.occupancies[BOTH] & ((1ULL << b8) | (1ULL << c8) | (1ULL << d8)))) {
+                if (!board.isSquareAttacked(e8, WHITE) &&
+                    !board.isSquareAttacked(d8, WHITE) &&
+                    !board.isSquareAttacked(c8, WHITE)) {
+                    push_move(Move(e8, c8, QUEEN_CASTLE));
                 }
             }
         }
     }
+}
 
 void generateBishopMoves(const Board &board, Move *move_list, Colour colour, int *move_count) {
     // Identify our bishop piece type

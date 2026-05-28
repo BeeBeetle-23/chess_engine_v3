@@ -2,23 +2,40 @@
 #include "bitboard/masks.h"
 #include "move/move.h"
 #include "board/board.h"
+#include <cassert>
 u64 king_attacks[64];
 u64 knight_attacks[64];
 u64 pawn_attacks[2][64];
 u64 maskKnightAttacks(int sq)
 {
+    assert(sq >= 0 && sq < 64 && "square out of range");
+
     u64 attacks = 0ULL;
     u64 bit = 1ULL << sq;
 
-    if ((bit << 17) & ~FILE_A) attacks |= (bit << 17);
-    if ((bit << 15) & ~FILE_H) attacks |= (bit << 15);
-    if ((bit << 10) & ~(FILE_A | FILE_B)) attacks |= (bit << 10);
-    if ((bit << 6)  & ~(FILE_H | FILE_G)) attacks |= (bit << 6);
+    // +2 rank, +1 file: wraps off FILE_H
+    if (bit & ~FILE_H)          attacks |= (bit << 17);
 
-    if ((bit >> 17) & ~FILE_H) attacks |= (bit >> 17);
-    if ((bit >> 15) & ~FILE_A) attacks |= (bit >> 15);
-    if ((bit >> 10) & ~(FILE_H | FILE_G)) attacks |= (bit >> 10);
-    if ((bit >> 6)  & ~(FILE_A | FILE_B)) attacks |= (bit >> 6);
+    // +2 rank, -1 file: wraps off FILE_A
+    if (bit & ~FILE_A)          attacks |= (bit << 15);
+
+    // +1 rank, +2 file: wraps off FILE_G or FILE_H
+    if (bit & ~(FILE_G | FILE_H)) attacks |= (bit << 10);
+
+    // +1 rank, -2 file: wraps off FILE_A or FILE_B
+    if (bit & ~(FILE_A | FILE_B)) attacks |= (bit << 6);
+
+    // -2 rank, -1 file: wraps off FILE_A
+    if (bit & ~FILE_A)          attacks |= (bit >> 17);
+
+    // -2 rank, +1 file: wraps off FILE_H
+    if (bit & ~FILE_H)          attacks |= (bit >> 15);
+
+    // -1 rank, -2 file: wraps off FILE_A or FILE_B
+    if (bit & ~(FILE_A | FILE_B)) attacks |= (bit >> 10);
+
+    // -1 rank, +2 file: wraps off FILE_G or FILE_H
+    if (bit & ~(FILE_G | FILE_H)) attacks |= (bit >> 6);
 
     return attacks;
 }

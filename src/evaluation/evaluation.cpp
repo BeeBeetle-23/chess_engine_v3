@@ -54,8 +54,12 @@ int evaluate(const Board &board){
     }
     return score;
 }
-void scoreMoves(const Board &board, ScoredMove moves,int count){
+void scoreMoves(const Board &board, ScoredMove moves,int count,Move pvmove){
     for(int i = 0; i<count; i++){
+        if(moves.move[i] == pvmove) {
+            moves.score[i] = 10'000'000;
+            continue;
+        }
         const MoveFlag flag = moves.move[i].flag();
         switch(flag){
             case QUEEN_PROMO_CAPTURE: moves.score[i] = 9'000'000;break;

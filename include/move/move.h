@@ -63,6 +63,13 @@ struct Move {
         return MoveFlag((data >> 12) & 0x0F);
     }
     void move_into_algebraic() const;
+    constexpr bool operator==(const Move& other) const {
+        return data == other.data;
+    }
+
+    constexpr bool operator!=(const Move& other) const {
+        return data != other.data;
+    }
 };
 
 struct ScoredMove{

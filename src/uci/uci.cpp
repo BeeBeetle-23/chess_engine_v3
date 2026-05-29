@@ -61,7 +61,7 @@ void uci_loop(Board& board) {
                     break;
                 }
             }
-            Move best = findBestMove(board, depth,Move());
+            Move best = findBestMove(board, depth);
             std::cout << "bestmove ";
             best.move_into_algebraic();
             std::cout << "\n";

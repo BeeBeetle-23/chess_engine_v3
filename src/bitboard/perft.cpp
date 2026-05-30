@@ -1,4 +1,4 @@
-/*#include "bitboard/perft.h"
+#include "bitboard/perft.h"
 #include "board/board.h"
 #include "movegen/generateattacks.h"
 #include <cstdint>
@@ -47,9 +47,9 @@ void perft_divide(Board& board, int depth) {
         board.undo_move();
 
         // Print individual move results
-        move_list[i].print_into_algebraic(); 
+        move_list[i].move_into_algebraic(); 
         std::cout << ": " << move_nodes << "\n";
     }
 
     std::cout << "\nTotal Nodes: " << total_nodes << "\n\n";
-}*/
+}

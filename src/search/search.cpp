@@ -56,6 +56,7 @@ int negamax(Board &board, int depth, int alpha, int beta, int ply) {
         board.make_move(move_list.move[i]);
         int score = -negamax(board, depth - 1, -beta, -alpha, ply + 1);
         board.undo_move();
+        if (score >= beta) return best_score;
 
         if (score > best_score) {
             best_score = score;
@@ -67,8 +68,6 @@ int negamax(Board &board, int depth, int alpha, int beta, int ply) {
                 for (int next = ply + 1; next < pv_length[ply + 1]; next++)
                     pv[ply][next] = pv[ply + 1][next];
                 pv_length[ply] = pv_length[ply + 1];
-
-                if (score >= beta) return best_score;  // beta cutoff
             }
         }
     }

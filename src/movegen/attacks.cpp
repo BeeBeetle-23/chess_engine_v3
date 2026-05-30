@@ -1,12 +1,67 @@
 #include "movegen/attacks.h"
 #include "bitboard/masks.h"
 #include "move/move.h"
+#include "bitboard/masks.h"
 #include "board/board.h"
 #include <cassert>
 u64 king_attacks[64];
 u64 knight_attacks[64];
 u64 pawn_attacks[2][64];
-u64 maskKnightAttacks(int sq)
+u64 sliding_piece_attacks[108'000];
+SMagic mRookTbl[64];
+SMagic mBishopTbl[64];
+u64 setOccupancy(int index, int bits_in_mask, u64 mask){
+    u64 occupancy = 0ull;
+    for(int i = 0; i<bits_in_mask; i++){
+        int square = pop_lsb(mask);
+        if(index&(1<<i)){
+            occupancy |= (1ull<<square);
+        }
+    }
+    return occupancy;
+}
+
+u64 bishopAttacks(u64 occ, Square sq) {
+   u64* aptr = mBishopTbl[sq].ptr;
+   occ      &= mBishopTbl[sq].mask;
+   occ      *= mBishopTbl[sq].magic;
+   occ     >>= mBishopTbl[sq].shift;
+   return aptr[occ];
+}
+
+u64 rookAttacks(u64 occ, Square sq) {
+   u64* aptr = mRookTbl[sq].ptr;
+   occ      &= mRookTbl[sq].mask;
+   occ      *= mRookTbl[sq].magic;
+   occ     >>= mRookTbl[sq].shift;
+   return aptr[occ];
+}
+
+u64 maskRookAttacks(Square sq) {
+    u64 mask = 0ULL;
+    int r = sq / 8;
+    int f = sq % 8;
+    
+    for (int nr = r + 1; nr < 7; nr++) mask |= (1ULL << (nr * 8 + f));
+    for (int nr = r - 1; nr > 0; nr--) mask |= (1ULL << (nr * 8 + f));
+    for (int nf = f + 1; nf < 7; nf++) mask |= (1ULL << (r * 8 + nf));
+    for (int nf = f - 1; nf > 0; nf--) mask |= (1ULL << (r * 8 + nf));
+    return mask;
+}
+
+u64 maskBishopAttacks(Square sq) {
+    u64 mask = 0ULL;
+    int r = sq / 8;
+    int f = sq % 8;
+    
+    for (int nr = r + 1, nf = f + 1; nr < 7 && nf < 7; nr++, nf++) mask |= (1ULL << (nr * 8 + nf));
+    for (int nr = r + 1, nf = f - 1; nr < 7 && nf > 0; nr++, nf--) mask |= (1ULL << (nr * 8 + nf));
+    for (int nr = r - 1, nf = f + 1; nr > 0 && nf < 7; nr--, nf++) mask |= (1ULL << (nr * 8 + nf));
+    for (int nr = r - 1, nf = f - 1; nr > 0 && nf > 0; nr--, nf--) mask |= (1ULL << (nr * 8 + nf));
+    return mask;
+}
+
+u64 maskKnightAttacks(Square sq)
 {
     assert(sq >= 0 && sq < 64 && "square out of range");
 
@@ -40,7 +95,7 @@ u64 maskKnightAttacks(int sq)
     return attacks;
 }
 
-u64 maskKingAttacks(int sq)
+u64 maskKingAttacks(Square sq)
 {
     u64 attacks = 0ULL;
 
@@ -98,13 +153,56 @@ u64 maskPawnAttacks(Square sq, Colour side)
     return attacks;
 }
 
+void initMagicTables() {
+    u64* current_ptr = sliding_piece_attacks;
+
+    for (int sq = 0; sq < 64; sq++) {
+        // 1. Initialize Bishop Entry
+        mBishopTbl[sq].mask = maskBishopAttacks((Square)sq);
+        mBishopTbl[sq].magic = bishopmagics[sq];
+        
+        // CALCULATE SHIFT ON THE FLY!
+        mBishopTbl[sq].shift = 64 - __builtin_popcountll(mBishopTbl[sq].mask); 
+        
+        mBishopTbl[sq].ptr = current_ptr;
+
+        int bishop_bits = 64 - mBishopTbl[sq].shift; // This will equal your popcount!
+        int bishop_occupancy_combos = 1 << bishop_bits;
+        current_ptr += bishop_occupancy_combos; 
+
+        for (int i = 0; i < bishop_occupancy_combos; i++) {
+            u64 occ = setOccupancy(i, bishop_bits, mBishopTbl[sq].mask);
+            u64 magic_index = (occ * mBishopTbl[sq].magic) >> mBishopTbl[sq].shift;
+            mBishopTbl[sq].ptr[magic_index] = bishopAttacks(occ,(Square)sq);
+        }
+
+        // 2. Initialize Rook Entry
+        mRookTbl[sq].mask = maskRookAttacks((Square)sq);
+        mRookTbl[sq].magic = rookmagics[sq];
+        
+        // CALCULATE SHIFT ON THE FLY!
+        mRookTbl[sq].shift = 64 - __builtin_popcountll(mRookTbl[sq].mask); 
+        
+        mRookTbl[sq].ptr = current_ptr;
+
+        int rook_bits = 64 - mRookTbl[sq].shift;
+        int rook_occupancy_combos = 1 << rook_bits;
+        current_ptr += rook_occupancy_combos;
+
+        for (int i = 0; i < rook_occupancy_combos; i++) {
+            u64 occ = setOccupancy(i, rook_bits, mRookTbl[sq].mask);
+            u64 magic_index = (occ * mRookTbl[sq].magic) >> mRookTbl[sq].shift;
+            mRookTbl[sq].ptr[magic_index] = rookAttacks(occ,(Square)sq);
+        }
+    }
+}
+
 void initAttackTables()
 {
     for (int i = 0; i < 64; i++)
     {
-        knight_attacks[i] = maskKnightAttacks(i);
-        king_attacks[i] = maskKingAttacks(i);
-
+        knight_attacks[i] = maskKnightAttacks((Square)i);
+        king_attacks[i] = maskKingAttacks((Square)i);
         pawn_attacks[WHITE][i] = maskPawnAttacks((Square)i, WHITE);
         pawn_attacks[BLACK][i] = maskPawnAttacks((Square)i, BLACK);
     }

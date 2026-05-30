@@ -72,4 +72,4 @@ void scoreMoves(const Board &board, ScoredMove moves,int count,Move pvmove){
             default: moves.score[i] = 0;break;
         }
     }
-} 
+}

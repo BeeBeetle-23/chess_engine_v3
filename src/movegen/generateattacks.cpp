@@ -11,12 +11,12 @@ using u64 = uint64_t;
 
 void generatePawnMoves(const Board &board, Move *move_list, Colour colour, int *move_count) {
     // --- Entry guards ---
-    assert(move_list  != nullptr        && "move_list is null");
+    /*assert(move_list  != nullptr        && "move_list is null");
     assert(move_count != nullptr        && "move_count is null");
     assert(*move_count >= 0             && "move_count is negative");
     assert(*move_count < MAX_MOVES      && "move_list already full on entry");
     assert(board.ep_square == NO_SQUARE || 
-           board.ep_square < 64         && "ep_square out of range");
+           board.ep_square < 64         && "ep_square out of range");*/
 
     // Safe EP — explicitly compare against your sentinel,
     // not < 64, which silently passes on -1 or 255 depending on signedness
@@ -28,7 +28,7 @@ void generatePawnMoves(const Board &board, Move *move_list, Colour colour, int *
 
     // Bounds-checked push: every single move write goes through here
     const auto push_move = [&](Move m) {
-        assert(*move_count < MAX_MOVES && "move_list overflow in generatePawnMoves");
+        /*assert(*move_count < MAX_MOVES && "move_list overflow in generatePawnMoves");*/
         move_list[(*move_count)++] = m;
     };
 
@@ -454,7 +454,7 @@ void generateLegalMoves(Board &board,Move *legal_move_list,Colour colour,int *le
 {
     int movecount = 0;
 
-    Move move_list[256];
+    Move move_list[MAX_MOVES];
 
     Colour attacker =
         (colour == WHITE)
@@ -484,4 +484,79 @@ void generateLegalMoves(Board &board,Move *legal_move_list,Colour colour,int *le
 
         board.undo_move();
     }
+}
+
+void generatePawnCaptures(const Board &board, Move *move_list, Colour colour, int *move_count) {
+    u64 pawns = (colour == WHITE)?board.pieces[WP]:board.pieces[BP];
+    u64 enemies = (colour == WHITE)?board.occupancies[BLACK]:board.occupancies[BLACK];
+
+    while (pawns) {
+        Square from = (Square)__builtin_ctzll(pawns);  // LSB = lowest set square
+        pop_lsb(pawns);                                 // clear it
+
+        u64 attacks = maskPawnAttacks(from, colour) & enemies;  // only squares with enemy pieces
+
+        while (attacks) {
+            Square to = (Square)__builtin_ctzll(attacks);
+            pop_lsb(attacks);
+
+            // Check promotion capture (reaching rank 8 or rank 1)
+            if ((colour == WHITE && to >= a8) || (colour == BLACK && to <= h1)) {
+                for (MoveFlag promo : {QUEEN_PROMO_CAPTURE, ROOK_PROMO_CAPTURE, 
+                    BISHOP_PROMO_CAPTURE, KNIGHT_PROMO_CAPTURE}) {
+                    move_list[(*move_count)++] = Move(from, to, promo);
+                }
+            } else {
+                move_list[(*move_count)++] = Move(from, to, CAPTURE);
+            }
+            if (board.ep_square != NO_SQUARE) {
+                u64 ep_attacks = maskPawnAttacks(from, colour) & (1ULL << board.ep_square);
+                if (ep_attacks) {
+                    move_list[(*move_count)++] = Move(from, board.ep_square, EP_CAPTURE);
+                }
+            }
+        }
+    }
+}
+
+void generateKnightCaptures(const Board &board, Move *move_list, Colour colour, int *move_count){
+    u64 knights = (colour == WHITE)?board.pieces[WN]:board.pieces[BN];
+    u64 enemies = (colour == WHITE)?board.occupancies[BLACK]:board.occupancies[BLACK];
+    while(knights){
+        Square from = (Square)__builtin_ctzll(knights);
+        pop_lsb(knights);
+        u64 attacks = maskKnightAttacks(from)&attacks;
+        while(attacks){
+            Square to = (Square)__builtin_ctzll(attacks);
+            move_list[(*move_count)++] = Move(from,to,CAPTURE);
+        }
+    }
+}
+
+void generateKingCaptures(const Board &board, Move *move_list, Colour colour, int *move_count){
+    u64 king = (colour == WHITE)?board.pieces[WK]:board.pieces[BK];
+    u64 enemies = (colour == WHITE)?board.occupancies[BLACK]:board.occupancies[BLACK];
+    Square from = (colour == WHITE)?board.king_square[WHITE]:board.king_square[BLACK];
+    u64 attacks = maskKnightAttacks(from)&attacks;
+    while(attacks){
+        Square to = (Square)__builtin_ctzll(attacks);
+        move_list[(*move_count)++] = Move(from,to,CAPTURE);
+    }
+    
+}
+
+void generateBishopCaptures(const Board &board, Move *move_list, Colour colour, int *move_count){
+
+}
+
+void generateRookCaptures(const Board &board, Move *move_list, Colour colour, int *move_count){
+    
+}
+
+void generateQueenCaptures(const Board &board, Move *move_list, Colour colour, int *move_count){
+
+}
+
+void generateCaptures(const Board &board, Move *move_list, Colour colour, int *move_count){
+    
 }

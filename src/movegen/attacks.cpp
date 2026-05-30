@@ -1,6 +1,7 @@
 #include "movegen/attacks.h"
 #include "bitboard/masks.h"
 #include "move/move.h"
+#include <unordered_set>
 #include "bitboard/masks.h"
 #include "board/board.h"
 #include <cassert>
@@ -153,6 +154,62 @@ u64 maskPawnAttacks(Square sq, Colour side)
     return attacks;
 }
 
+u64 generateRookAttacksOnTheFly(Square sq, u64 occupancy) {
+    u64 attacks = 0ULL;
+    int r = sq / 8;
+    int f = sq % 8;
+
+    // Ray Up
+    for (int i = r + 1; i <= 7; i++) {
+        attacks |= (1ULL << (i * 8 + f));
+        if (occupancy & (1ULL << (i * 8 + f))) break; // Hit a blocker!
+    }
+    // Ray Down
+    for (int i = r - 1; i >= 0; i--) {
+        attacks |= (1ULL << (i * 8 + f));
+        if (occupancy & (1ULL << (i * 8 + f))) break;
+    }
+    // Ray Right
+    for (int i = f + 1; i <= 7; i++) {
+        attacks |= (1ULL << (r * 8 + i));
+        if (occupancy & (1ULL << (r * 8 + i))) break;
+    }
+    // Ray Left
+    for (int i = f - 1; i >= 0; i--) {
+        attacks |= (1ULL << (r * 8 + i));
+        if (occupancy & (1ULL << (r * 8 + i))) break;
+    }
+    return attacks;
+}
+
+u64 generateBishopAttacksOnTheFly(Square sq, u64 occupancy) {
+    u64 attacks = 0ULL;
+    int r = sq / 8;
+    int f = sq % 8;
+
+    // Top Right
+    for (int nr = r + 1, nf = f + 1; nr <= 7 && nf <= 7; nr++, nf++) {
+        attacks |= (1ULL << (nr * 8 + nf));
+        if (occupancy & (1ULL << (nr * 8 + nf))) break;
+    }
+    // Top Left
+    for (int nr = r + 1, nf = f - 1; nr <= 7 && nf >= 0; nr++, nf--) {
+        attacks |= (1ULL << (nr * 8 + nf));
+        if (occupancy & (1ULL << (nr * 8 + nf))) break;
+    }
+    // Bottom Right
+    for (int nr = r - 1, nf = f + 1; nr >= 0 && nf <= 7; nr--, nf++) {
+        attacks |= (1ULL << (nr * 8 + nf));
+        if (occupancy & (1ULL << (nr * 8 + nf))) break;
+    }
+    // Bottom Left
+    for (int nr = r - 1, nf = f - 1; nr >= 0 && nf >= 0; nr--, nf--) {
+        attacks |= (1ULL << (nr * 8 + nf));
+        if (occupancy & (1ULL << (nr * 8 + nf))) break;
+    }
+    return attacks;
+}
+
 void initMagicTables() {
     u64* current_ptr = sliding_piece_attacks;
 
@@ -173,7 +230,11 @@ void initMagicTables() {
         for (int i = 0; i < bishop_occupancy_combos; i++) {
             u64 occ = setOccupancy(i, bishop_bits, mBishopTbl[sq].mask);
             u64 magic_index = (occ * mBishopTbl[sq].magic) >> mBishopTbl[sq].shift;
-            mBishopTbl[sq].ptr[magic_index] = bishopAttacks(occ,(Square)sq);
+            u64 attacks = generateBishopAttacksOnTheFly((Square)sq,occ);
+            if (mBishopTbl[sq].ptr[magic_index] != 0 && mBishopTbl[sq].ptr[magic_index] != attacks) {
+                printf("Destructive BISHOP collision on square %d at index %llu!\n", sq, magic_index);
+            }
+            mBishopTbl[sq].ptr[magic_index] = attacks;
         }
 
         // 2. Initialize Rook Entry
@@ -192,9 +253,16 @@ void initMagicTables() {
         for (int i = 0; i < rook_occupancy_combos; i++) {
             u64 occ = setOccupancy(i, rook_bits, mRookTbl[sq].mask);
             u64 magic_index = (occ * mRookTbl[sq].magic) >> mRookTbl[sq].shift;
-            mRookTbl[sq].ptr[magic_index] = rookAttacks(occ,(Square)sq);
+            u64 attacks = generateRookAttacksOnTheFly((Square)sq, occ);
+
+            if (mRookTbl[sq].ptr[magic_index] != 0 && mRookTbl[sq].ptr[magic_index] != attacks) {
+                printf("Destructive ROOK collision on square %d at index %llu!\n", sq, magic_index);
+            }
+            mRookTbl[sq].ptr[magic_index] = attacks;        
         }
+        
     }
+    
 }
 
 void initAttackTables()

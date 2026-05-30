@@ -191,10 +191,9 @@ void generateKnightMoves(const Board &board, Move *move_list, Colour colour, int
     u64 knights      = board.pieces[colour == WHITE ? WN : BN];
 
     while (knights) {
-        const int from_sq = __builtin_ctzll(knights);     // ← explicit, no pop_lsb ambiguity
-        knights &= knights - 1;
+        int from_sq = pop_lsb(knights);
 
-        u64 attacks = knight_attacks[from_sq] & ~us;      // mask own pieces up front
+        u64 attacks = knight_attacks[from_sq] & ~us;
         while (attacks) {
             const int to_sq = __builtin_ctzll(attacks);
             attacks &= attacks - 1;
@@ -206,13 +205,13 @@ void generateKnightMoves(const Board &board, Move *move_list, Colour colour, int
 }
 
 void generateKingMoves(const Board &board, Move *move_list, Colour colour, int *move_count) {
-    assert(move_list  != nullptr   && "move_list is null");
+    /*assert(move_list  != nullptr   && "move_list is null");
     assert(move_count != nullptr   && "move_count is null");
     assert(*move_count >= 0        && "move_count negative");
-    assert(*move_count < MAX_MOVES && "move_list full on entry");
+    assert(*move_count < MAX_MOVES && "move_list full on entry");*/
 
     const auto push_move = [&](Move m) {
-        assert(*move_count < MAX_MOVES && "move_list overflow in generateKingMoves");
+        //assert(*move_count < MAX_MOVES && "move_list overflow in generateKingMoves");
         move_list[(*move_count)++] = m;
     };
 
@@ -221,7 +220,7 @@ void generateKingMoves(const Board &board, Move *move_list, Colour colour, int *
     u64 king        = board.pieces[colour == WHITE ? WK : BK];
 
     // Exactly one king must exist
-    assert(__builtin_popcountll(king) == 1 && "king bitboard does not have exactly 1 bit");
+    //assert(__builtin_popcountll(king) == 1 && "king bitboard does not have exactly 1 bit");
 
     while (king) {
         const int from_sq = __builtin_ctzll(king);
@@ -281,7 +280,7 @@ void generateKingMoves(const Board &board, Move *move_list, Colour colour, int *
 
 void generateBishopMoves(const Board &board, Move *move_list, Colour colour, int *move_count) {
     // Identify our bishop piece type
-    Piece bishop_piece = (colour == WHITE) ? WB : BB;
+    /*Piece bishop_piece = (colour == WHITE) ? WB : BB;
     Bitboard bishops = board.pieces[bishop_piece];
 
     // Grab friend vs enemy occupancy layers
@@ -339,12 +338,25 @@ void generateBishopMoves(const Board &board, Move *move_list, Colour colour, int
                 cur_rank += dr;
             }
         }
+    }*/
+    u64 bishops = (colour == WHITE)?board.pieces[WB]:board.pieces[BB];
+    u64 us = (colour == WHITE)?board.occupancies[WHITE]:board.occupancies[BLACK];
+    u64 them = (colour == BLACK)?board.occupancies[WHITE]:board.occupancies[BLACK];
+    while(bishops){
+        int from = pop_lsb(bishops);
+        u64 attacks = bishopAttacks(board.occupancies[BOTH],(Square)from);
+        attacks &= ~us;
+        while(attacks){
+            int to = pop_lsb(attacks);
+            MoveFlag flag = ((1ull << to) & them)?CAPTURE:QUIET;
+            move_list[(*move_count)++] = Move((Square)from,(Square)to,flag);
+        }
     }
 }
 
 void generateRookMoves(const Board &board, Move *move_list, Colour colour, int *move_count) {
     // Identify our rook piece type
-    Piece rook_piece = (colour == WHITE) ? WR : BR;
+    /*Piece rook_piece = (colour == WHITE) ? WR : BR;
     Bitboard rooks = board.pieces[rook_piece];
 
     // Grab friend vs enemy occupancy layers
@@ -394,12 +406,25 @@ void generateRookMoves(const Board &board, Move *move_list, Colour colour, int *
                 cur_rank += dr;
             }
         }
+    }*/
+    u64 rooks = (colour == WHITE)?board.pieces[WR]:board.pieces[BR];
+    u64 us = (colour == WHITE)?board.occupancies[WHITE]:board.occupancies[BLACK];
+    u64 them = (colour == BLACK)?board.occupancies[WHITE]:board.occupancies[BLACK];
+    while(rooks){
+        int from = pop_lsb(rooks);
+        u64 attacks = rookAttacks(board.occupancies[BOTH],(Square)from);
+        attacks &= ~us;
+        while(attacks){
+            int to = pop_lsb(attacks);
+            MoveFlag flag = ((1ull << to) & them)?CAPTURE:QUIET;
+            move_list[(*move_count)++] = Move((Square)from,(Square)to,flag);
+        }
     }
 }
 
 void generateQueenMoves(const Board &board, Move *move_list, Colour colour, int *move_count) {
     // Identify our queen piece type
-    Piece queen_piece = (colour == WHITE) ? WQ : BQ;
+    /*Piece queen_piece = (colour == WHITE) ? WQ : BQ;
     Bitboard queens = board.pieces[queen_piece];
 
     // Grab friend vs enemy occupancy layers
@@ -446,6 +471,19 @@ void generateQueenMoves(const Board &board, Move *move_list, Colour colour, int 
                 cur_file += df;
                 cur_rank += dr;
             }
+        }
+    }*/
+    u64 queens = (colour == WHITE)?board.pieces[WQ]:board.pieces[BQ];
+    u64 us = (colour == WHITE)?board.occupancies[WHITE]:board.occupancies[BLACK];
+    u64 them = (colour == BLACK)?board.occupancies[WHITE]:board.occupancies[BLACK];
+    while(queens){
+        int from = pop_lsb(queens);
+        u64 attacks = bishopAttacks(board.occupancies[BOTH],(Square)from) | rookAttacks(board.occupancies[BOTH],(Square)from);
+        attacks &= ~us;
+        while(attacks){
+            int to = pop_lsb(attacks);
+            MoveFlag flag = ((1ull << to) & them)?CAPTURE:QUIET;
+            move_list[(*move_count)++] = Move((Square)from,(Square)to,flag);
         }
     }
 }

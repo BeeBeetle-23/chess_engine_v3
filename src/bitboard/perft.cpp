@@ -32,6 +32,7 @@ void perft_divide(Board& board, int depth) {
     u64 total_nodes = 0; // Kept consistent with u64 from perft
     Move move_list[256];
     
+    
     generateLegalMoves(board, move_list, board.side_to_move, &legal_count);
 
     std::cout << "\n--- DIVIDE DEPTH " << depth << " ---\n";

@@ -17,13 +17,16 @@ int main(){
     initAttackTables();
     initMagicTables();
     //uci_loop(board);
-    /*Board board; int depth = 6;
+    Board board; int depth = 5;
     board.Parse_FEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     auto start = std::chrono::steady_clock::now();
+    //perft_divide(board,depth);
     u64 nodes = perft(board, depth);
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double, std::milli> elapsed = end - start;
     std::cout << "Function execution time: " << elapsed.count() << " ms\n";
-    return 0;*/
+    //return 0;
+    //std::cout<<nodes;
+    
     return 0;
 }

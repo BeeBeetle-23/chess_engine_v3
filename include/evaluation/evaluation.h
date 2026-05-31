@@ -1,5 +1,6 @@
 #include "board/board.h"
 int evaluate(const Board &board);
+int getCapturedPieceValue(Board &board, Move move);
 int get_base_value(int p);
 int get_positional_value(int p, int square);
 int getMVVLVA(const Board& board, Move move);

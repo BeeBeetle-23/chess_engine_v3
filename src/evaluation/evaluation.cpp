@@ -17,7 +17,11 @@ constexpr int MVV_LVA[6][6] = {
     {55,54,53,52,51,50}, // victim queen
     {0,0,0,0,0,0}
 };
-
+int getCapturedPieceValue(Board &board, Move move){
+    if(move.flag() != CAPTURE) return 0;
+    int piece = board.piece_on[move.to()];
+    return piece_value[piece];
+}
 int getMVVLVA(const Board& board, Move move) {
     // Get attacker type (0-5 regardless of colour)
     int attacker = board.piece_on[move.from()] % 6;
@@ -86,6 +90,8 @@ int Quiesce(Board &board, int alpha, int beta) {
         return best_value;
     if( best_value > alpha)
         alpha = best_value;
+    const int DELTA = 900;
+    if(static_eval + DELTA < alpha) return alpha;
     ScoredMove move_list;
     int move_count = 0;
     generateCaptures(board,move_list.move,(Colour)board.side_to_move,&move_count);
@@ -101,6 +107,8 @@ int Quiesce(Board &board, int alpha, int beta) {
         if (move_list.score[j] > move_list.score[best]) best = j;
         std::swap(move_list.move[i],  move_list.move[best]);
         std::swap(move_list.score[i], move_list.score[best]);
+        int captured_value = getCapturedPieceValue(board, move_list.move[i]);
+        if (static_eval + captured_value + 200 < alpha) continue;
         board.make_move(move_list.move[i]);
         int score = -Quiesce(board, -beta, -alpha);
         board.undo_move();

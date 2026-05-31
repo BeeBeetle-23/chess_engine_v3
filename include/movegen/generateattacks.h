@@ -15,4 +15,4 @@ void generateKnightCaptures(const Board &board, Move *move_list, Colour colour, 
 void generateQueenCaptures(const Board &board, Move *move_list, Colour colour, int *move_count);
 void generateRookCaptures(const Board &board, Move *move_list, Colour colour, int *move_count);
 void generateKingCaptures(const Board &board, Move *move_list, Colour colour, int *move_count);
-void generateCaptures(const Board &board, Move *move_list, Colour colour, int *move_count);
+void generateCaptures(Board &board, Move *move_list, Colour colour, int *move_count);

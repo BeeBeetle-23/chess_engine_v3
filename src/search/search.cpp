@@ -8,6 +8,7 @@
 constexpr int INF  = 1000000;
 Move pv[MAX_PLY][MAX_PLY];
 int pv_length[MAX_PLY];
+int negamax_nodes = 0;
 
 void validate_board(const Board& b) {
     u64 white = 0ULL;
@@ -27,11 +28,15 @@ void validate_board(const Board& b) {
 }
 
 int negamax(Board &board, int depth, int alpha, int beta, int ply) {
+    negamax_nodes++;
     pv_length[ply] = ply;
 
-    if (depth == 0) {
+    if (depth <= 0) {
+        if(is_in_check(board)) return negamax(board,1,alpha,beta,ply);
+        else{
         int side = (board.side_to_move == WHITE) ? 1 : -1;
-        return side * evaluate(board);
+        return side * Quiesce(board,alpha,beta);
+        }
     }
 
     ScoredMove move_list;
@@ -56,7 +61,7 @@ int negamax(Board &board, int depth, int alpha, int beta, int ply) {
         board.make_move(move_list.move[i]);
         int score = -negamax(board, depth - 1, -beta, -alpha, ply + 1);
         board.undo_move();
-        if (score >= beta) return best_score;
+        if (score >= beta) return score;
 
         if (score > best_score) {
             best_score = score;
@@ -71,6 +76,7 @@ int negamax(Board &board, int depth, int alpha, int beta, int ply) {
             }
         }
     }
+
 
     return best_score;
 }

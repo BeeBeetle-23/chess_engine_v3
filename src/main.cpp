@@ -1,6 +1,6 @@
 #include <iostream>
 #include <cstdint>
-#include <unordered_set>
+#include "evaluation\evaluation.h"
 #include "board/board.h"
 #include "movegen/attacks.h"
 #include "movegen/generateattacks.h"
@@ -16,17 +16,14 @@ int main(){
     
     initAttackTables();
     initMagicTables();
+    Board board;int depth = 5;
     //uci_loop(board);
-    Board board; int depth = 5;
-    board.Parse_FEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    board.Parse_FEN("r2qr1k1/1bp1bppp/p1np1n2/1p2p3/3PP3/1BP2N1P/PP1B1PP1/RN1QR1K1 b - - 0 1");
     auto start = std::chrono::steady_clock::now();
-    //perft_divide(board,depth);
-    u64 nodes = perft(board, depth);
+    findBestMove(board,depth).move_into_algebraic();
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double, std::milli> elapsed = end - start;
     std::cout << "Function execution time: " << elapsed.count() << " ms\n";
-    //return 0;
-    //std::cout<<nodes;
-    
+    std::cout<<"\nNegamax nodes = "<<negamax_nodes<<"\n"<<"Q nodes = "<<q_nodes;
     return 0;
 }

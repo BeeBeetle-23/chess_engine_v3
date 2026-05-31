@@ -526,17 +526,14 @@ void generateLegalMoves(Board &board,Move *legal_move_list,Colour colour,int *le
 
 void generatePawnCaptures(const Board &board, Move *move_list, Colour colour, int *move_count) {
     u64 pawns = (colour == WHITE)?board.pieces[WP]:board.pieces[BP];
-    u64 enemies = (colour == WHITE)?board.occupancies[BLACK]:board.occupancies[BLACK];
-
+    u64 enemies = (colour == WHITE)?board.occupancies[BLACK]:board.occupancies[WHITE];
     while (pawns) {
-        Square from = (Square)__builtin_ctzll(pawns);  // LSB = lowest set square
-        pop_lsb(pawns);                                 // clear it
+        Square from = (Square)pop_lsb(pawns);                                 // clear it
 
         u64 attacks = maskPawnAttacks(from, colour) & enemies;  // only squares with enemy pieces
 
         while (attacks) {
-            Square to = (Square)__builtin_ctzll(attacks);
-            pop_lsb(attacks);
+            Square to = (Square)pop_lsb(attacks);
 
             // Check promotion capture (reaching rank 8 or rank 1)
             if ((colour == WHITE && to >= a8) || (colour == BLACK && to <= h1)) {
@@ -559,13 +556,12 @@ void generatePawnCaptures(const Board &board, Move *move_list, Colour colour, in
 
 void generateKnightCaptures(const Board &board, Move *move_list, Colour colour, int *move_count){
     u64 knights = (colour == WHITE)?board.pieces[WN]:board.pieces[BN];
-    u64 enemies = (colour == WHITE)?board.occupancies[BLACK]:board.occupancies[BLACK];
+    u64 enemies = (colour == WHITE)?board.occupancies[BLACK]:board.occupancies[WHITE];
     while(knights){
-        Square from = (Square)__builtin_ctzll(knights);
-        pop_lsb(knights);
-        u64 attacks = maskKnightAttacks(from)&attacks;
+        Square from = (Square)pop_lsb(knights);
+        u64 attacks = maskKnightAttacks(from)& enemies;
         while(attacks){
-            Square to = (Square)__builtin_ctzll(attacks);
+            Square to = (Square)pop_lsb(attacks);
             move_list[(*move_count)++] = Move(from,to,CAPTURE);
         }
     }
@@ -573,28 +569,86 @@ void generateKnightCaptures(const Board &board, Move *move_list, Colour colour, 
 
 void generateKingCaptures(const Board &board, Move *move_list, Colour colour, int *move_count){
     u64 king = (colour == WHITE)?board.pieces[WK]:board.pieces[BK];
-    u64 enemies = (colour == WHITE)?board.occupancies[BLACK]:board.occupancies[BLACK];
+    u64 enemies = (colour == WHITE)?board.occupancies[BLACK]:board.occupancies[WHITE];
     Square from = (colour == WHITE)?board.king_square[WHITE]:board.king_square[BLACK];
-    u64 attacks = maskKnightAttacks(from)&attacks;
+    u64 attacks = maskKingAttacks(from)& enemies;
     while(attacks){
-        Square to = (Square)__builtin_ctzll(attacks);
+        Square to = (Square)pop_lsb(attacks);
         move_list[(*move_count)++] = Move(from,to,CAPTURE);
     }
     
 }
 
 void generateBishopCaptures(const Board &board, Move *move_list, Colour colour, int *move_count){
-
+    u64 bishops = (colour == WHITE)?board.pieces[WB]:board.pieces[BB];
+    u64 enemies = (colour == WHITE)?board.occupancies[BLACK]:board.occupancies[WHITE];
+    while(bishops){
+        Square from = (Square)pop_lsb(bishops);
+        u64 attacks = bishopAttacks(board.occupancies[BOTH],from) & enemies;
+        while(attacks){
+            Square to = (Square)pop_lsb(attacks);
+            move_list[(*move_count)++] = Move(from,to,CAPTURE);
+        }
+    }
 }
 
 void generateRookCaptures(const Board &board, Move *move_list, Colour colour, int *move_count){
-    
+    u64 rooks = (colour == WHITE)?board.pieces[WR]:board.pieces[BR];
+    u64 enemies = (colour == WHITE)?board.occupancies[BLACK]:board.occupancies[WHITE];
+    while(rooks){
+        Square from = (Square)pop_lsb(rooks);
+        u64 attacks = rookAttacks(board.occupancies[BOTH],from) & enemies;
+        while(attacks){
+            Square to = (Square)pop_lsb(attacks);
+            move_list[(*move_count)++] = Move(from,to,CAPTURE);
+        }
+    }
 }
 
 void generateQueenCaptures(const Board &board, Move *move_list, Colour colour, int *move_count){
-
+    u64 queens = (colour == WHITE)?board.pieces[WQ]:board.pieces[BQ];
+    u64 enemies = (colour == WHITE)?board.occupancies[BLACK]:board.occupancies[WHITE];
+    while(queens){
+        Square from = (Square)pop_lsb(queens);
+        u64 attacks = (bishopAttacks(board.occupancies[BOTH],from) | rookAttacks(board.occupancies[BOTH],from))& enemies;
+        while(attacks){
+            Square to = (Square)pop_lsb(attacks);
+            move_list[(*move_count)++] = Move(from,to,CAPTURE);
+        }
+    }
 }
 
-void generateCaptures(const Board &board, Move *move_list, Colour colour, int *move_count){
-    
+void generateCaptures(Board &board, Move *capture_move_list, Colour colour, int *capture_count){
+    int movecount = 0;
+
+    Move move_list[MAX_MOVES];
+
+    Colour attacker =
+        (colour == WHITE)
+        ? BLACK
+        : WHITE;
+
+    generatePawnCaptures(board, move_list, colour, &movecount);
+    generateKnightCaptures(board, move_list, colour, &movecount);
+    generateBishopCaptures(board, move_list, colour, &movecount);
+    generateRookCaptures(board, move_list, colour, &movecount);
+    generateQueenCaptures(board, move_list, colour, &movecount);
+    generateKingCaptures(board, move_list, colour, &movecount);
+
+    *capture_count = 0;
+
+    for (int i = 0; i < movecount; i++)
+    {
+        board.make_move(move_list[i]);
+
+        if (!board.isSquareAttacked(board.king_square[colour],attacker))
+        {
+            capture_move_list[*capture_count] =
+                move_list[i];
+
+            (*capture_count)++;
+        }
+
+        board.undo_move();
+    }
 }

@@ -1,7 +1,10 @@
 #include "evaluation/evaluation.h"
 #include "board/board.h"
+#include "movegen/generateattacks.h"
+#include "move/move.h"
 #include <bit>
 #include "bitboard/bitboard.h"
+int q_nodes = 0;
 int get_base_value(int p){
     return piece_value[p];
 }
@@ -72,4 +75,43 @@ void scoreMoves(const Board &board, ScoredMove moves,int count,Move pvmove){
             default: moves.score[i] = 0;break;
         }
     }
+}
+
+int Quiesce(Board &board, int alpha, int beta) {
+    q_nodes++;
+    int static_eval = evaluate(board);
+    //Stand pat
+    int best_value = static_eval;
+    if( best_value >= beta)
+        return best_value;
+    if( best_value > alpha)
+        alpha = best_value;
+    ScoredMove move_list;
+    int move_count = 0;
+    generateCaptures(board,move_list.move,(Colour)board.side_to_move,&move_count);
+    //Assign MVVLVA to everything
+    for(int i = 0; i<move_count;i++){
+        move_list.score[i] = getMVVLVA(board,move_list.move[i]); 
+    }
+
+
+    for(int i = 0; i<move_count; i++)  {
+        int best = i;
+        for (int j = i + 1; j < move_count; j++)
+        if (move_list.score[j] > move_list.score[best]) best = j;
+        std::swap(move_list.move[i],  move_list.move[best]);
+        std::swap(move_list.score[i], move_list.score[best]);
+        board.make_move(move_list.move[i]);
+        int score = -Quiesce(board, -beta, -alpha);
+        board.undo_move();
+
+        if( score >= beta )
+            return score;
+        if( score > best_value )
+            best_value = score;
+        if( score > alpha )
+            alpha = score;
+    }
+
+    return best_value;
 }

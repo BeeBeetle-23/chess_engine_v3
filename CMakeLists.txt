@@ -23,6 +23,7 @@ set(SOURCES
     src/evaluation/evaluation.cpp
     src/search/search.cpp
     src/uci/uci.cpp
+    src/board/zobrist.cpp
 )
 
 # 4. Define the final executable output using the project name macro

@@ -250,6 +250,7 @@ inline void Board::remove_piece(Piece piece, Square sq)
 {
     pieces[piece] = setBitZero(pieces[piece], sq);
     piece_on[sq] = NO_PIECE;
+    
 }
 inline void Board::add_piece(Piece piece, Square sq)
 {
@@ -309,65 +310,27 @@ Piece Board::promotion_piece(Colour side,MoveFlag flag) const
 }
 bool Board::isSquareAttacked(Square square, Colour attacker) const
 {
-
-    if (attacker == WHITE)
-    {
-        if (pieces[WP] &
-            pawn_attacks[BLACK][square])
-        {
-            return true;
-        }
+    //Pawn Attacks
+    if (attacker == WHITE){
+        if (pieces[WP] & pawn_attacks[BLACK][square])  return true;
     }
-    else
-    {
-        if (pieces[BP] &
-            pawn_attacks[WHITE][square])
-        {
-            return true;
-        }
+    else{
+        if (pieces[BP] & pawn_attacks[WHITE][square]) return true;
     }
+    //Knight Attacks
+    if (knight_attacks[square] & (attacker == WHITE ? pieces[WN] : pieces[BN])) return true;
+    
+    //King attacks
+    if (king_attacks[square] & (attacker == WHITE ? pieces[WK] : pieces[BK]))  return true;
 
-    if (knight_attacks[square] &
-        (attacker == WHITE
-            ? pieces[WN]
-            : pieces[BN]))
-    {
-        return true;
-    }
-
-    if (king_attacks[square] &
-        (attacker == WHITE
-            ? pieces[WK]
-            : pieces[BK]))
-    {
-        return true;
-    }
-
-    u64 bishop_attackers =
-        (attacker == WHITE)
-        ? (pieces[WB] | pieces[WQ])
-        : (pieces[BB] | pieces[BQ]);
-
-    if (get_bishop_attacks(
-            square,
-            occupancies[BOTH]) &
-        bishop_attackers)
-    {
-        return true;
-    }
-    u64 rook_attackers =
-        (attacker == WHITE)
-        ? (pieces[WR] | pieces[WQ])
-        : (pieces[BR] | pieces[BQ]);
-
-    if (get_rook_attacks(
-            square,
-            occupancies[BOTH]) &
-        rook_attackers)
-    {
-        return true;
-    }
-
+    //Bishop Attacks
+    u64 bishop_attackers = (attacker == WHITE) ? (pieces[WB] | pieces[WQ]) : (pieces[BB] | pieces[BQ]);
+    if(bishopAttacks(occupancies[BOTH],square) & bishop_attackers) return true;
+    
+    //Rook Attacks
+    u64 rook_attackers = (attacker == WHITE) ? (pieces[WR] | pieces[WQ]) : (pieces[BR] | pieces[BQ]);
+    if(rookAttacks(occupancies[BOTH],square) & rook_attackers) return true;
+    
     return false;
 }
 void Board::update_occupancies(){

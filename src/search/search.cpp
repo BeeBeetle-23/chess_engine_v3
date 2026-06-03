@@ -4,6 +4,7 @@
 #include "bitboard/bitboard.h"
 #include <algorithm>
 #include <cassert>
+#include "board/zobrist.h"
 #define MAX_PLY 20
 constexpr int INF  = 1000000;
 Move pv[MAX_PLY][MAX_PLY];
@@ -28,15 +29,17 @@ void validate_board(const Board& b) {
 }
 
 int negamax(Board &board, int depth, int alpha, int beta, int ply) {
+    int current_alpha = alpha;
     negamax_nodes++;
-    pv_length[ply] = ply;
+    pv_length[ply] = ply; 
 
+    // Check Extension Logic
+    bool in_check = is_in_check(board);
+    if (in_check) {
+        depth++;
+    }
     if (depth <= 0) {
-        if(is_in_check(board)) return negamax(board,1,alpha,beta,ply);
-        else{
-        int side = (board.side_to_move == WHITE) ? 1 : -1;
-        return side * Quiesce(board,alpha,beta);
-        }
+        return Quiesce(board, alpha, beta);
     }
 
     ScoredMove move_list;
@@ -44,14 +47,16 @@ int negamax(Board &board, int depth, int alpha, int beta, int ply) {
     generateLegalMoves(board, move_list.move, board.side_to_move, &legalCount);
 
     if (legalCount == 0)
-        return is_in_check(board) ? (-MATE_SCORE + ply) : 0;
+        return in_check ? (-MATE_SCORE + ply) : 0;
 
+    // Move ordering (TT best move goes here later!)
     scoreMoves(board, move_list, legalCount, pv[0][ply]);
 
     int best_score = -INF;
+    Move best_move_this_node = Move(); // Needed for TT storage later
 
     for (int i = 0; i < legalCount; i++) {
-        // selection sort: pick best scored move
+        // Selection sort
         int best = i;
         for (int j = i + 1; j < legalCount; j++)
             if (move_list.score[j] > move_list.score[best]) best = j;
@@ -59,25 +64,33 @@ int negamax(Board &board, int depth, int alpha, int beta, int ply) {
         std::swap(move_list.score[i], move_list.score[best]);
 
         board.make_move(move_list.move[i]);
+        // Notice the standard negamax parameters
         int score = -negamax(board, depth - 1, -beta, -alpha, ply + 1);
         board.undo_move();
-        if (score >= beta) return score;
+
+        if (score >= beta) {
+            // Beta cutoff (This is a LOWER_BOUND flag for the TT)
+            return score; 
+        }
 
         if (score > best_score) {
             best_score = score;
 
             if (score > alpha) {
                 alpha = score;
+                best_move_this_node = move_list.move[i];
 
+                // Fix 2: Secure the PV line update safely
                 pv[ply][ply] = move_list.move[i];
-                for (int next = ply + 1; next < pv_length[ply + 1]; next++)
+                for (int next = ply + 1; next < pv_length[ply + 1]; next++) {
                     pv[ply][next] = pv[ply + 1][next];
-                pv_length[ply] = pv_length[ply + 1];
+                }
+                pv_length[ply] = pv_length[ply + 1]; 
             }
         }
     }
 
-
+    // TT Store happens here right before returning!
     return best_score;
 }
 

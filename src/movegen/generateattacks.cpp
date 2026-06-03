@@ -10,76 +10,59 @@ static constexpr int MAX_MOVES = 256;
 using u64 = uint64_t;
 
 void generatePawnMoves(const Board &board, Move *move_list, Colour colour, int *move_count) {
-    // --- Entry guards ---
-    /*assert(move_list  != nullptr        && "move_list is null");
+    assert(move_list  != nullptr        && "move_list is null");
     assert(move_count != nullptr        && "move_count is null");
     assert(*move_count >= 0             && "move_count is negative");
     assert(*move_count < MAX_MOVES      && "move_list already full on entry");
-    assert(board.ep_square == NO_SQUARE || 
-           board.ep_square < 64         && "ep_square out of range");*/
+    assert(board.ep_square == NO_SQUARE ||
+           board.ep_square < 64         && "ep_square out of range");
 
-    // Safe EP — explicitly compare against your sentinel,
-    // not < 64, which silently passes on -1 or 255 depending on signedness
     const u64 ep_bitboard = (board.ep_square != NO_SQUARE)
                           ? (1ULL << board.ep_square)
                           : 0ULL;
 
     const u64 empty_squares = ~board.occupancies[BOTH];
 
-    // Bounds-checked push: every single move write goes through here
     const auto push_move = [&](Move m) {
-        /*assert(*move_count < MAX_MOVES && "move_list overflow in generatePawnMoves");*/
         move_list[(*move_count)++] = m;
     };
 
     if (colour == WHITE) {
         const u64 enemy_pieces = board.occupancies[BLACK];
 
-        // -------------------------------------------------------
-        // PUSHES — bulk bitboard (attack table doesn't model these)
-        // -------------------------------------------------------
         const u64 single_pushes = (board.pieces[WP] << 8) & empty_squares;
         const u64 double_pushes = ((single_pushes & RANK_3) << 8) & empty_squares;
 
         u64 normal_pushes = single_pushes & ~RANK_8;
         while (normal_pushes) {
-            const int to_sq = __builtin_ctzll(normal_pushes);
+            const int to_sq = pop_lsb(normal_pushes);
             push_move(Move((Square)(to_sq - 8), (Square)to_sq, QUIET));
-            normal_pushes &= normal_pushes - 1;
         }
 
         u64 promo_pushes = single_pushes & RANK_8;
         while (promo_pushes) {
-            const int   to_sq   = __builtin_ctzll(promo_pushes);
+            const int    to_sq   = pop_lsb(promo_pushes);
             const Square from_sq = (Square)(to_sq - 8);
             push_move(Move(from_sq, (Square)to_sq, QUEEN_PROMOTION));
             push_move(Move(from_sq, (Square)to_sq, ROOK_PROMOTION));
             push_move(Move(from_sq, (Square)to_sq, BISHOP_PROMOTION));
             push_move(Move(from_sq, (Square)to_sq, KNIGHT_PROMOTION));
-            promo_pushes &= promo_pushes - 1;
         }
 
         u64 dbl = double_pushes;
         while (dbl) {
-            const int to_sq = __builtin_ctzll(dbl);
+            const int to_sq = pop_lsb(dbl);
             push_move(Move((Square)(to_sq - 16), (Square)to_sq, DOUBLE_PAWN_PUSH));
-            dbl &= dbl - 1;
         }
 
-        // -------------------------------------------------------
-        // CAPTURES + EP — per-pawn via attack table
-        // from_sq is known directly; no offset arithmetic needed,
-        // and FILE_A/FILE_H wrapping is already baked into the table
-        // -------------------------------------------------------
         u64 pawns = board.pieces[WP];
         while (pawns) {
-            const int from_sq   = __builtin_ctzll(pawns);
-            const u64 attacks   = pawn_attacks[WHITE][from_sq]; // precomputed, wrap-safe
+            const int from_sq = pop_lsb(pawns);
+            const u64 attacks = maskPawnAttacks((Square)from_sq, WHITE);
 
-            // Normal + promo captures
             u64 captures = attacks & enemy_pieces;
             while (captures) {
-                const int to_sq = __builtin_ctzll(captures);
+                const int to_sq = pop_lsb(captures);
                 if ((1ULL << to_sq) & RANK_8) {
                     push_move(Move((Square)from_sq, (Square)to_sq, QUEEN_PROMO_CAPTURE));
                     push_move(Move((Square)from_sq, (Square)to_sq, ROOK_PROMO_CAPTURE));
@@ -88,68 +71,53 @@ void generatePawnMoves(const Board &board, Move *move_list, Colour colour, int *
                 } else {
                     push_move(Move((Square)from_sq, (Square)to_sq, CAPTURE));
                 }
-                captures &= captures - 1;
             }
 
-            // En passant
             u64 ep = attacks & ep_bitboard;
             while (ep) {
-                const int to_sq = __builtin_ctzll(ep);
-                // Sanity: EP target must be on rank 6 for white
+                const int to_sq = pop_lsb(ep);
                 assert(((1ULL << to_sq) & RANK_6) && "white EP target not on rank 6");
                 push_move(Move((Square)from_sq, (Square)to_sq, EP_CAPTURE));
-                ep &= ep - 1;
             }
-
-            pawns &= pawns - 1;
         }
 
     } else { // BLACK
 
         const u64 enemy_pieces = board.occupancies[WHITE];
 
-        // -------------------------------------------------------
-        // PUSHES
-        // -------------------------------------------------------
         const u64 single_pushes = (board.pieces[BP] >> 8) & empty_squares;
         const u64 double_pushes = ((single_pushes & RANK_6) >> 8) & empty_squares;
 
         u64 normal_pushes = single_pushes & ~RANK_1;
         while (normal_pushes) {
-            const int to_sq = __builtin_ctzll(normal_pushes);
+            const int to_sq = pop_lsb(normal_pushes);
             push_move(Move((Square)(to_sq + 8), (Square)to_sq, QUIET));
-            normal_pushes &= normal_pushes - 1;
         }
 
         u64 promo_pushes = single_pushes & RANK_1;
         while (promo_pushes) {
-            const int    to_sq   = __builtin_ctzll(promo_pushes);
+            const int    to_sq   = pop_lsb(promo_pushes);
             const Square from_sq = (Square)(to_sq + 8);
             push_move(Move(from_sq, (Square)to_sq, QUEEN_PROMOTION));
             push_move(Move(from_sq, (Square)to_sq, ROOK_PROMOTION));
             push_move(Move(from_sq, (Square)to_sq, BISHOP_PROMOTION));
             push_move(Move(from_sq, (Square)to_sq, KNIGHT_PROMOTION));
-            promo_pushes &= promo_pushes - 1;
         }
 
         u64 dbl = double_pushes;
         while (dbl) {
-            const int to_sq = __builtin_ctzll(dbl);
+            const int to_sq = pop_lsb(dbl);
             push_move(Move((Square)(to_sq + 16), (Square)to_sq, DOUBLE_PAWN_PUSH));
-            dbl &= dbl - 1;
         }
 
-        // -------------------------------------------------------
-        // CAPTURES + EP
-        // -------------------------------------------------------
         u64 pawns = board.pieces[BP];
         while (pawns) {
-            const int from_sq = __builtin_ctzll(pawns);
-            const u64 attacks  = pawn_attacks[BLACK][from_sq];
+            const int from_sq = pop_lsb(pawns);
+            const u64 attacks = maskPawnAttacks((Square)from_sq, BLACK);
 
             u64 captures = attacks & enemy_pieces;
             while (captures) {
-                const int to_sq = __builtin_ctzll(captures);
+                const int to_sq = pop_lsb(captures);
                 if ((1ULL << to_sq) & RANK_1) {
                     push_move(Move((Square)from_sq, (Square)to_sq, QUEEN_PROMO_CAPTURE));
                     push_move(Move((Square)from_sq, (Square)to_sq, ROOK_PROMO_CAPTURE));
@@ -158,19 +126,14 @@ void generatePawnMoves(const Board &board, Move *move_list, Colour colour, int *
                 } else {
                     push_move(Move((Square)from_sq, (Square)to_sq, CAPTURE));
                 }
-                captures &= captures - 1;
             }
 
             u64 ep = attacks & ep_bitboard;
             while (ep) {
-                const int to_sq = __builtin_ctzll(ep);
-                // Sanity: EP target must be on rank 3 for black
+                const int to_sq = pop_lsb(ep);
                 assert(((1ULL << to_sq) & RANK_3) && "black EP target not on rank 3");
                 push_move(Move((Square)from_sq, (Square)to_sq, EP_CAPTURE));
-                ep &= ep - 1;
             }
-
-            pawns &= pawns - 1;
         }
     }
 }

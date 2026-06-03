@@ -74,9 +74,9 @@ public:
     void undo_move();
 
     void update_occupancies();
-    inline void add_piece(Piece piece, Square sq);
-    inline void remove_piece(Piece piece, Square sq);
-    inline void move_piece(Piece piece, Square from, Square to);
+    void add_piece(Piece piece, Square sq);
+    void remove_piece(Piece piece, Square sq);
+    void move_piece(Piece piece, Square from, Square to);
     Piece promotion_piece(Colour side, MoveFlag flag) const;
     bool isSquareAttacked(Square square,Colour attacker_colour) const;
     u64 get_bishop_attacks(Square square, u64 blockers) const;
@@ -85,7 +85,9 @@ public:
     void clearBoard();
     void Parse_FEN(const std::string& fen);
     Piece char_to_piece(char c);
-    char piece_to_char(Square from);;
+    char piece_to_char(Square from);
+    void verify_board(const std::string& context, Move move);
+    void print_board();
 };
 inline bool is_in_check(const Board &board){
     Colour us = board.side_to_move;

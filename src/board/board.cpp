@@ -9,8 +9,137 @@
 #include <string>
 #include <vector>
 #include <sstream>
+#include <cassert>
 #include <string>
 using u64 = uint64_t;
+void Board::print_board()
+{
+    std::cout << "\n";
+
+    for (int rank = 7; rank >= 0; rank--)
+    {
+        std::cout << rank + 1 << " ";
+
+        for (int file = 0; file < 8; file++)
+        {
+            int sq = rank * 8 + file;
+
+            std::cout
+                << piece_to_char((Square)sq)
+                << " ";
+        }
+
+        std::cout << "\n";
+    }
+
+    std::cout << "  a b c d e f g h\n\n";
+
+    std::cout << "Side: "
+              << (side_to_move == WHITE ? "WHITE" : "BLACK")
+              << "\n";
+
+    std::cout << "EP: " << ep_square << "\n";
+
+    std::cout << "Castling: "
+              << ((castling_rights & WK_CASTLE) ? "K" : "")
+              << ((castling_rights & WQ_CASTLE) ? "Q" : "")
+              << ((castling_rights & BK_CASTLE) ? "k" : "")
+              << ((castling_rights & BQ_CASTLE) ? "q" : "")
+              << "\n";
+
+    std::cout << "White King: " << king_square[WHITE] << "\n";
+    std::cout << "Black King: " << king_square[BLACK] << "\n";
+
+    std::cout << "\n";
+}
+void Board::verify_board(const std::string& context, Move move)
+{
+    u64 expected_white = 0;
+    u64 expected_black = 0;
+
+    // Rebuild occupancies from piece bitboards
+    for (int p = WP; p <= WK; p++)
+        expected_white |= pieces[p];
+
+    for (int p = BP; p <= BK; p++)
+        expected_black |= pieces[p];
+
+    u64 expected_both = expected_white | expected_black;
+
+    // Verify occupancies
+    assert(expected_white == occupancies[WHITE]);
+    assert(expected_black == occupancies[BLACK]);
+    assert(expected_both  == occupancies[BOTH]);
+
+    // Verify piece_on[] agrees with piece bitboards
+    for (int sq = 0; sq < 64; sq++)
+    {
+        Piece piece = piece_on[sq];
+
+        if (piece == NO_PIECE)
+        {
+            for (int p = WP; p <= BK; p++)
+            {
+                if (getBit(pieces[p], sq))
+                {
+                    std::cout << "EMPTY SQUARE OCCUPIED IN BITBOARD\n";
+                    goto fail;
+                }
+            }
+        }
+        else
+        {
+            if (!getBit(pieces[piece], sq))
+            {
+                std::cout << "piece_on[] disagrees with bitboards\n";
+                goto fail;
+            }
+        }
+    }
+
+    // Verify bitboards agree with piece_on[]
+    for (int p = WP; p <= BK; p++)
+    {
+        u64 bb = pieces[p];
+
+        while (bb)
+        {
+            Square sq = (Square)pop_lsb(bb);
+
+            if (piece_on[sq] != p)
+            {
+                std::cout << "Bitboard disagrees with piece_on[]\n";
+                goto fail;
+            }
+        }
+    }
+
+    // Verify king locations
+    if (piece_on[king_square[WHITE]] != WK)
+    {
+        std::cout << "White king square incorrect\n";
+        goto fail;
+    }
+
+    if (piece_on[king_square[BLACK]] != BK)
+    {
+        std::cout << "Black king square incorrect\n";
+        goto fail;
+    }
+
+    return;
+
+fail:
+    std::cout << "\nBOARD VERIFICATION FAILED\n";
+    std::cout << "Context: " << context << "\n";
+    std::cout << "Move: " ;move.move_into_algebraic();
+    std::cout << "Flag: " << (int)move.flag() << "\n";
+    std::cout << "Ply: " << ply << "\n";
+
+    print_board();
+
+    assert(false);
+}
 void Board::reset() {
     // 1. Clear everything
     for (int p = 0; p < 12; ++p) pieces[p] = 0ULL;
@@ -246,24 +375,33 @@ u64 Board::get_rook_attacks( Square square,u64 blockers) const
 
     return attacks;
 }
-inline void Board::remove_piece(Piece piece, Square sq)
+void Board::remove_piece(Piece piece, Square sq)
 {
+    assert(piece_on[sq] == piece);
     pieces[piece] = setBitZero(pieces[piece], sq);
+    Colour colour = get_piece_colour(piece);
+    occupancies[colour] = setBitZero(occupancies[colour], sq);
+    occupancies[BOTH] = setBitZero(occupancies[BOTH], sq);
     piece_on[sq] = NO_PIECE;
     
 }
-inline void Board::add_piece(Piece piece, Square sq)
+void Board::add_piece(Piece piece, Square sq)
 {
+    assert(piece_on[sq] == NO_PIECE);
     pieces[piece] = setBitOne(pieces[piece], sq);
+    Colour c = get_piece_colour(piece);
+    occupancies[c] = setBitOne(occupancies[c], sq);
+    occupancies[BOTH] = setBitOne(occupancies[BOTH], sq);
     piece_on[sq] = piece;
 }
-inline void Board::move_piece(Piece piece, Square from, Square to)
+void Board::move_piece(Piece piece, Square from, Square to)
 {
+    assert(piece_on[from] == piece);
     remove_piece(piece, from);
     add_piece(piece, to);
+    
     if (piece == WK)
         king_square[WHITE] = to;
-
     else if (piece == BK)
         king_square[BLACK] = to;
 }
@@ -322,14 +460,15 @@ bool Board::isSquareAttacked(Square square, Colour attacker) const
     
     //King attacks
     if (king_attacks[square] & (attacker == WHITE ? pieces[WK] : pieces[BK]))  return true;
-
+    uint64_t occ = occupancies[WHITE] | occupancies[BLACK];
+    assert(occ == occupancies[BOTH]);
     //Bishop Attacks
     u64 bishop_attackers = (attacker == WHITE) ? (pieces[WB] | pieces[WQ]) : (pieces[BB] | pieces[BQ]);
-    if(bishopAttacks(occupancies[BOTH],square) & bishop_attackers) return true;
+    if(bishopAttacks(occ,square) & bishop_attackers) return true;
     
     //Rook Attacks
     u64 rook_attackers = (attacker == WHITE) ? (pieces[WR] | pieces[WQ]) : (pieces[BR] | pieces[BQ]);
-    if(rookAttacks(occupancies[BOTH],square) & rook_attackers) return true;
+    if(rookAttacks(occ,square) & rook_attackers) return true;
     
     return false;
 }
@@ -357,7 +496,6 @@ void Board::update_occupancies(){
 void Board::make_move(Move move)
 {
     // Save undo information
-
     history[ply].move             = move;
     history[ply].castling_rights  = castling_rights;
     history[ply].ep_square        = ep_square;
@@ -368,98 +506,56 @@ void Board::make_move(Move move)
 
     const Square from = move.from();
     const Square to   = move.to();
-
     const MoveFlag flag = move.flag();
+    const Colour us = side_to_move;
+    const Colour them = (side_to_move == WHITE)?BLACK:WHITE;
 
-    const Colour us =
-        side_to_move;
-
-    const Colour them =
-        (side_to_move == WHITE)
-        ? BLACK
-        : WHITE;
-
-    const Piece moving =
-        piece_on[from];
+    const Piece moving = piece_on[from];
 
     // Clear EP square by default
     ep_square = NO_SQUARE;
 
-    // Handle move types
-
     switch(flag)
     {
         // QUIET
-
-        case QUIET:
-        {
+        case QUIET:{
             move_piece(moving, from, to);
             break;
         }
 
         // DOUBLE PAWN PUSH
-
-        case DOUBLE_PAWN_PUSH:
-        {
+        case DOUBLE_PAWN_PUSH:{
             move_piece(moving, from, to);
 
-            ep_square =
-                (us == WHITE)
-                ? Square(to - 8)
-                : Square(to + 8);
-
-            break;
+            ep_square = (us == WHITE)? Square(to - 8): Square(to + 8);break;
         }
 
         // NORMAL CAPTURE
-
-        case CAPTURE:
-        {
+        case CAPTURE:{
             Piece captured = piece_on[to];
-
-            history[ply].captured_piece =
-                captured;
-
+            history[ply].captured_piece = captured;
             remove_piece(captured, to);
-
             move_piece(moving, from, to);
-
             break;
         }
 
         // EN PASSANT
-
-        case EP_CAPTURE:
-        {
-            Square cap_sq =
-                (us == WHITE)
-                ? Square(to - 8)
-                : Square(to + 8);
-
-            Piece captured =
-                piece_on[cap_sq];
-
-            history[ply].captured_piece =
-                captured;
-
+        case EP_CAPTURE:{
+            Square cap_sq = (us == WHITE)? Square(to - 8): Square(to + 8);
+            Piece captured = piece_on[cap_sq];
+            history[ply].captured_piece = captured;
             remove_piece(captured, cap_sq);
-
             move_piece(moving, from, to);
-
             break;
         }
 
         // KING CASTLE
-
-        case KING_CASTLE:
-        {
-            if (us == WHITE)
-            {
+        case KING_CASTLE:{
+            if (us == WHITE){
                 move_piece(WK, e1, g1);
                 move_piece(WR, h1, f1);
             }
-            else
-            {
+            else{
                 move_piece(BK, e8, g8);
                 move_piece(BR, h8, f8);
             }
@@ -468,16 +564,13 @@ void Board::make_move(Move move)
         }
 
         // QUEEN CASTLE
-
         case QUEEN_CASTLE:
         {
-            if (us == WHITE)
-            {
+            if (us == WHITE){
                 move_piece(WK, e1, c1);
                 move_piece(WR, a1, d1);
             }
-            else
-            {
+            else{
                 move_piece(BK, e8, c8);
                 move_piece(BR, a8, d8);
             }
@@ -490,53 +583,38 @@ void Board::make_move(Move move)
         case KNIGHT_PROMOTION:
         case BISHOP_PROMOTION:
         case ROOK_PROMOTION:
-        case QUEEN_PROMOTION:
-        {
+        case QUEEN_PROMOTION:{
             remove_piece(moving, from);
 
-            Piece promo =
-                promotion_piece(us, flag);
-
+            Piece promo = promotion_piece(us, flag);
             add_piece(promo, to);
-
             break;
         }
 
         // PROMOTION CAPTURES
-
         case KNIGHT_PROMO_CAPTURE:
         case BISHOP_PROMO_CAPTURE:
         case ROOK_PROMO_CAPTURE:
-        case QUEEN_PROMO_CAPTURE:
-        {
-            Piece captured =
-                piece_on[to];
+        case QUEEN_PROMO_CAPTURE:{
+            Piece captured = piece_on[to];
 
-            history[ply].captured_piece =
-                captured;
+            history[ply].captured_piece = captured;
 
             remove_piece(captured, to);
-
             remove_piece(moving, from);
 
-            Piece promo =
-                promotion_piece(us, flag);
-
+            Piece promo = promotion_piece(us, flag);
             add_piece(promo, to);
-
             break;
         }
     }
 
     // Update castling rights
+    castling_rights &= castle_rights_mask[from];
 
-    castling_rights &=
-        castle_rights_mask[from];
+    castling_rights &= castle_rights_mask[to];
 
-    castling_rights &=
-        castle_rights_mask[to];
-
-    update_occupancies();
+    //update_occupancies();
 
     // Update clocks
 
@@ -557,6 +635,7 @@ void Board::make_move(Move move)
         : WHITE;
 
     ply++;
+    verify_board("MAKE_MOVE",move);
 }
 void Board::undo_move(){
     ply--;
@@ -569,10 +648,7 @@ void Board::undo_move(){
 
     MoveFlag flag = move.flag();
 
-    side_to_move =
-        (side_to_move == WHITE)
-        ? BLACK
-        : WHITE;
+    side_to_move = (side_to_move == WHITE)? BLACK: WHITE;
 
     Colour colour = side_to_move;
 
@@ -584,23 +660,27 @@ void Board::undo_move(){
         case QUIET:{
             Piece piece = piece_on[to];
             move_piece(piece,to,from);
-            break;}
+            break;
+        }
         case DOUBLE_PAWN_PUSH:{
             Piece piece = piece_on[to];
             move_piece(piece,to,from);
             ep_square = NO_SQUARE;
-            break;}
+            break;
+        }
         case CAPTURE:{
             Piece piece = piece_on[to];
             Piece captured = undo.captured_piece;
             move_piece(piece,to,from);
-            add_piece(captured,to);break;}
+            add_piece(captured,to);break;
+        }
         case EP_CAPTURE:{
             Piece piece = piece_on[to];
             Piece captured = undo.captured_piece;
             move_piece(piece,to,from);
             Square offset = (colour == WHITE)?Square(to-8):Square(to+8);
-            add_piece(captured,offset);break;}
+            add_piece(captured,offset);break;
+        }
         case KING_CASTLE:{
             if(colour == WHITE){
                 move_piece(WK,g1,e1);
@@ -609,7 +689,9 @@ void Board::undo_move(){
             else{
                 move_piece(BK,g8,e8);
                 move_piece(BR,f8,h8);
-            }break;}
+            }
+            break;
+        }
         case QUEEN_CASTLE:{
             if(colour == WHITE){
                 move_piece(WK,c1,e1);
@@ -618,7 +700,9 @@ void Board::undo_move(){
             else{
                 move_piece(BK,c8,e8);
                 move_piece(BR,d8,a8);
-            }break;}
+            }
+            break;
+        }
         case KNIGHT_PROMOTION:
         case QUEEN_PROMOTION:
         case ROOK_PROMOTION:
@@ -640,7 +724,8 @@ void Board::undo_move(){
             break;
         }
     }
-    update_occupancies();
+    verify_board("UNDO MOVE",move);
+    //update_occupancies();
 }
 
 

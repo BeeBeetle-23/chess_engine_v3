@@ -1,10 +1,11 @@
 #include "board/board.h"
+#include "search\search.h"
 int evaluate(const Board &board);
 int getCapturedPieceValue(Board &board, Move move);
 int get_base_value(int p);
 int get_positional_value(int p, int square);
 int getMVVLVA(const Board& board, Move move);
-void scoreMoves(const Board &board, ScoredMove moves,int count, Move pvmove);
+void scoreMoves(const Board &board, ScoredMove moves,int count, Move pvmove,Move ttmove);
 int Quiesce(Board &board, int alpha, int beta);
 extern int q_nodes;
 inline constexpr int piece_value[12] = {
@@ -13,13 +14,13 @@ inline constexpr int piece_value[12] = {
 };
 inline constexpr int pawn_square_table[64] ={0,  0,  0,  0,  0,  0,  0,  0,
 
-                            50, 50, 50, 50, 50, 50, 50, 50,
+                            60, 60, 60, 60, 60, 60, 60, 60,
 
-                            10, 10, 20, 30, 30, 20, 10, 10,
+                            10, 10, 20, 50, 50, 20, 10, 10,
 
-                            7,  5, 10, 25, 25, 10,  5,  7,
+                            7,  5, 10, 47, 47, 10,  5,  7,
 
-                            0,  0,  0, 20, 20,  0,  0,  0,
+                            0,  0,  0, 40, 45,  0,  0,  0,
 
                             5, -5,-10,  0,  0,-10, -5,  5,
 

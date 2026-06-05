@@ -3,7 +3,9 @@
 #include "movegen/generateattacks.h"
 #include "move/move.h"
 #include <bit>
+#include "search/search.h"
 #include "bitboard/bitboard.h"
+struct SearchStats;
 int q_nodes = 0;
 int get_base_value(int p){
     return piece_value[p];
@@ -47,22 +49,33 @@ int get_positional_value(int p,int square){
     }
     return 0;
 }
-int evaluate(const Board &board){
+int evaluate(const Board &board) {
     int score = 0;
-    for(int p = 0; p<12; p++){
+
+    for (int p = 0; p < 12; p++) {
         u64 piece = board.pieces[p];
         int piece_val = get_base_value(p);
-        while(piece){
+
+        while (piece) {
             int sq = pop_lsb(piece);
-            int positional_val = get_positional_value(p,sq);
-            if(p<=5) score += (piece_val+positional_val);
-            else score -= (piece_val+positional_val);
+            int positional_val = get_positional_value(p, sq);
+
+            if (p <= 5)
+                score += piece_val + positional_val;
+            else
+                score -= piece_val + positional_val;
         }
     }
-    return score;
+
+    return board.side_to_move == WHITE
+        ? score
+        : -score;
 }
-void scoreMoves(const Board &board, ScoredMove moves,int count,Move pvmove){
+void scoreMoves(const Board &board, ScoredMove moves,int count,Move pvmove,Move tt_move){
     for(int i = 0; i<count; i++){
+        if(moves.move[i] == tt_move){
+            moves.score[i] = 15'000'000;
+        }
         if(moves.move[i] == pvmove) {
             moves.score[i] = 10'000'000;
             continue;
@@ -82,7 +95,6 @@ void scoreMoves(const Board &board, ScoredMove moves,int count,Move pvmove){
 }
 
 int Quiesce(Board &board, int alpha, int beta) {
-    q_nodes++;
     int static_eval = evaluate(board);
     //Stand pat
     int best_value = static_eval;

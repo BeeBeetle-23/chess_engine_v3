@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include "movegen/generateattacks.h"
 #include <sstream>
 #include "board/board.h"
 #include "search/search.h"
@@ -47,7 +48,28 @@ void uci_loop(Board& board) {
                 std::string move_str;
                 while (stream >> move_str) {
                     Move move = algebraic_into_move(board, move_str);
+                    if(move == Move()){/*
+                        std::cout << "\n====================================\n";
+                        std::cout << "CRITICAL PARSE ERROR on move: " << move_str << "\n";
+                        std::cout << "Side to move: " << (board.side_to_move == 0 ? "WHITE" : "BLACK") << "\n";
+                        
+                        // Reveal what the engine thinks is actually legal
+                        ScoredMove list;
+                        int count = 0;
+                        generateLegalMoves(board, list.move, board.side_to_move, &count);
+                        
+                        std::cout << "Engine thinks there are only " << count << " legal moves:\n";
+                        for (int i = 0; i < count; i++) {
+                            list.move[i].move_into_algebraic();
+                            std::cout << " ";
+                        }
+                        std::cout << "\n====================================\n";
+                        break; // Stop the loop immediately so we don't corrupt the board*/
+                        printf("Empty move");
+                    }
+                    else{    
                     board.make_move(move);
+                    }
                 }
             }
         }

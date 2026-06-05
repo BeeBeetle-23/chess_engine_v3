@@ -21,7 +21,7 @@ namespace Zobrist {
 
     extern uint64_t pieces[12][64];
     extern uint64_t castling[16];
-    extern uint64_t en_passant[65];
+    extern uint64_t en_passant[64];
     extern uint64_t black_to_move;
 
     void init(uint64_t seed = 1070372531ULL);

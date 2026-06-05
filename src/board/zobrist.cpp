@@ -1,4 +1,5 @@
 #include "board\zobrist.h"
+#include "bitboard\bitboard.h"
 #include <random>
 #include <cstdint>
 double probes = 0;
@@ -7,7 +8,7 @@ namespace Zobrist {
 
     uint64_t pieces[12][64];
     uint64_t castling[16];
-    uint64_t en_passant[65];
+    uint64_t en_passant[64];
     uint64_t black_to_move;
 
     static uint64_t splitmix64(uint64_t& state) {
@@ -30,15 +31,14 @@ namespace Zobrist {
 
         for (int sq = 0; sq < 64; sq++)
             en_passant[sq] = splitmix64(state);
-        en_passant[64] = 0;
 
         black_to_move= splitmix64(state);
     }
 
 } // namespace Zobrist
 
+
 TTEntry* probe(uint64_t hash) {
-    probes++;
     TTEntry* entry =
         &transposition_table[tt_index(hash)];
     if (entry->hash == hash){
@@ -47,6 +47,7 @@ TTEntry* probe(uint64_t hash) {
     }
     return nullptr;
 }
+
 void store(uint64_t hash,int score,int depth,TTflag flag,Move best_move) {
     TTEntry& entry = transposition_table[tt_index(hash)];
 
@@ -58,3 +59,29 @@ void store(uint64_t hash,int score,int depth,TTflag flag,Move best_move) {
         entry.best_move = best_move;
     }
 }
+
+/*uint64_t computeHash(const Board &board){
+    uint64_t hash = 0;
+
+    // pieces
+    for (int piece = 0; piece < 12; piece++)
+    {
+        uint64_t bb = board.pieces[piece];
+
+        while (bb)
+        {
+            int sq = pop_lsb(bb);
+            hash ^= Zobrist::pieces[piece][sq];
+        }
+    }
+    hash ^= Zobrist::castling[board.castling_rights];
+
+    // ep
+    hash ^= Zobrist::en_passant[board.ep_square];
+
+    // side
+    if (board.side_to_move == BLACK)
+        hash ^= Zobrist::black_to_move;
+
+    return hash;
+}*/

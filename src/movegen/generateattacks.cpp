@@ -1,4 +1,5 @@
 #include "board/board.h"
+#include "board/zobrist.h"
 #include "move/move.h"
 #include "bitboard/masks.h"
 #include "movegen/attacks.h"
@@ -474,6 +475,7 @@ void generateLegalMoves(Board &board,Move *legal_move_list,Colour colour,int *le
     for (int i = 0; i < movecount; i++)
     {
         board.make_move(move_list[i]);
+        assert(board.zobrist_hash == board.computeHash());
 
         if (!board.isSquareAttacked(board.king_square[colour],attacker))
         {
@@ -484,6 +486,7 @@ void generateLegalMoves(Board &board,Move *legal_move_list,Colour colour,int *le
         }
 
         board.undo_move();
+        assert(board.zobrist_hash == board.computeHash());
     }
 }
 

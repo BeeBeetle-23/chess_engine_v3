@@ -37,20 +37,26 @@ void perft_divide(Board& board, int depth) {
 
     std::cout << "\n--- DIVIDE DEPTH " << depth << " ---\n";
 
-    // Loop strictly up to legal_count, not the full 256 size
-    for (int i = 0; i < legal_count; i++) {
-        board.make_move(move_list[i]);
-        
-        // Count nodes for the child branch
-        u64 move_nodes = perft(board, depth - 1);
-        total_nodes += move_nodes;
-        
-        board.undo_move();
+    uint64_t root_hash = board.zobrist_hash;
 
-        // Print individual move results
-        move_list[i].move_into_algebraic(); 
-        std::cout << ": " << move_nodes << "\n";
+for (int i = 0; i < legal_count; i++) {
+
+    board.make_move(move_list[i]);
+
+    /*if (board.zobrist_hash != board.computeHash()) {
+        printf("BROKEN AFTER MAKE\n");
+        exit(1);
+    }*/
+
+    perft(board, depth - 1);
+
+    board.undo_move();
+
+    if (board.zobrist_hash != root_hash) {
+        printf("BROKEN AFTER UNDO\n");
+        exit(1);
     }
+}
 
     std::cout << "\nTotal Nodes: " << total_nodes << "\n\n";
 }
